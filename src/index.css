@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@500;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #050505;
+  --surface: #0D0D0F;
+  --primary-red: #FF3B30;
+  --primary-orange: #FF7A00;
+  --text-primary: #FFFFFF;
+  --text-muted: #9A9A9A;
+  --border-color: #1E1E24;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #050505;
+  color: #FFFFFF;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: #050505;
+  color: #FFFFFF;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Cyber Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1E1E24;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FF3B30;
+}
+
+/* Futuristic Cyber Grid Pattern */
+.bg-cyber-grid {
+  background-size: 50px 50px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 59, 48, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 59, 48, 0.05) 1px, transparent 1px);
+}
+
+.bg-cyber-grid-dense {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Cyber Glow Gradients */
+.glow-effect-red {
+  box-shadow: 0 0 25px -3px rgba(255, 59, 48, 0.25);
+}
+
+.glow-effect-orange {
+  box-shadow: 0 0 25px -3px rgba(255, 122, 0, 0.25);
+}
+
+.text-gradient-fire {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FF7A00 50%, #FF3B30 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-silver {
+  background: linear-gradient(135deg, #FFFFFF 0%, #9A9A9A 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #FFF0B5 0%, #FFB800 60%, #FF7A00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Scanline Overlay */
+.scanline-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 4px, 6px 100%;
+  z-index: 40;
+}
+
+/* Neon Border Glow */
+.border-glow-hover {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.border-glow-hover:hover {
+  border-color: rgba(255, 59, 48, 0.7);
+  box-shadow: 0 0 20px rgba(255, 59, 48, 0.25);
+}
+
+/* Tech Cut Corner Button / Card */
+.cyber-cut-corner {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 14px) 0,
+    100% 14px,
+    100% 100%,
+    14px 100%,
+    0 calc(100% - 14px)
+  );
+}
+
+.cyber-cut-corner-sm {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% 100%,
+    8px 100%,
+    0 calc(100% - 8px)
+  );
+}
+
+/* Glassmorphism Panel */
+.glass-panel {
+  background: rgba(13, 13, 15, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-panel-subtle {
+  background: rgba(18, 18, 21, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Hologram Card */
+.hologram-card {
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.08) 0%, rgba(13, 13, 15, 0.95) 40%, rgba(255, 122, 0, 0.08) 100%);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
