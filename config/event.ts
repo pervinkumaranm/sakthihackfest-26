@@ -161,10 +161,8 @@ export const EVENT_CONFIG: EventConfig = {
         title: "1ST PRIZE",
         amount: "TBA", // TODO: OFFICIAL EVENT DATA
         perks: [
-          "Cash Prize & Grand Trophy",
-          "Direct Incubation / PoC Mentorship",
-          "Exclusive SHF'26 Winner Badges & Certificates",
-          "Cloud & Tooling Credits"
+          "Cash Prize ",
+          "Exclusive SHF'26 Winner Certificates",
         ],
         highlight: true,
       },
@@ -173,10 +171,8 @@ export const EVENT_CONFIG: EventConfig = {
         title: "2ND PRIZE",
         amount: "TBA", // TODO: OFFICIAL EVENT DATA
         perks: [
-          "Cash Prize & Silver Trophy",
-          "Industry Mentor Fast-Track Sessions",
-          "Merit Certificates & Tech Goodies",
-          "API & Infrastructure Perks"
+          "Cash Prize ",
+          "Exclusive SHF'26 Certificates",
         ],
       },
       {
@@ -184,21 +180,8 @@ export const EVENT_CONFIG: EventConfig = {
         title: "3RD PRIZE",
         amount: "TBA", // TODO: OFFICIAL EVENT DATA
         perks: [
-          "Cash Prize & Bronze Trophy",
-          "Investor & Industry Networking Access",
-          "Merit Certificates & Swag Kits",
-          "Partner Sponsor Perks"
-        ],
-      },
-      {
-        rank: "SP",
-        title: "SPECIAL AWARDS",
-        amount: "TBA", // TODO: OFFICIAL EVENT DATA
-        perks: [
-          "Best All-Women Team Award",
-          "Most Innovative Hardware/IoT Prototype",
-          "Best UI/UX & Product Design",
-          "Best Fresher Innovation"
+          "Cash Prize ",
+          "Exclusive SHF'26 Certificates",
         ],
       }
     ]
@@ -208,7 +191,7 @@ export const EVENT_CONFIG: EventConfig = {
     { label: "HOURS OF CODE", value: "24", suffix: "HRS" },
     { label: "PRIZE POOL", value: "TBA", suffix: "" }, // TODO: OFFICIAL EVENT DATA
     { label: "TEAMS SELECTED", sublabel: "(FIRST COME FIRST SERVE)", value: "40", suffix: "TEAMS" },
-    { label: "INNOVATION TRACKS", value: "05", suffix: "TRACKS" },
+    { label: "INNOVATION DOMAINS", value: "05", suffix: "DOMAINS" },
   ],
 
   challenges: [
@@ -268,7 +251,7 @@ export const EVENT_CONFIG: EventConfig = {
     {
       title: "WIN RECOGNITION",
       subtitle: "Capital & Industry Access",
-      description: "Compete for cash rewards, direct mentorship, cloud sponsorships, and fast-track hiring consideration with corporate sponsors.",
+      description: "Compete for cash rewards and Certificates.",
       icon: "Trophy"
     }
   ],
@@ -277,7 +260,7 @@ export const EVENT_CONFIG: EventConfig = {
     {
       id: "t1",
       stage: "REGISTRATION OPENS",
-      date: "SEP 01, 2026", // TODO: OFFICIAL EVENT DATA
+      date: "SEP 23, 2026", // TODO: OFFICIAL EVENT DATA
       time: "09:00 AM IST",
       description: "Online portal opens for team registration and preliminary idea submissions.",
       status: "completed"
@@ -291,11 +274,19 @@ export const EVENT_CONFIG: EventConfig = {
       status: "active"
     },
     {
+      id: "t-reporting",
+      stage: "REPORTING",
+      date: "OCT 10, 2026",
+      time: "09:00 AM IST",
+      description: "Participants report at the venue for registration verification, team check-in, and event briefing before the hackathon begins.",
+      status: "upcoming"
+    },
+    {
       id: "t3",
       stage: "HACKATHON BEGINS",
       date: "OCT 10, 2026",
-      time: "08:30 AM IST",
-      description: "Reporting, security badge verification, breakfast, and grand opening ceremony.",
+      time: "09:30 AM IST",
+      description: "Grand opening ceremony, keynote address, and official hackathon kickoff.",
       status: "upcoming"
     },
     {
@@ -303,14 +294,14 @@ export const EVENT_CONFIG: EventConfig = {
       stage: "BUILD PHASE (24-HR NON-STOP)",
       date: "OCT 10, 2026",
       time: "10:30 AM IST",
-      description: "Hack clocks begin ticking. Continuous Wi-Fi 6, power grids, midnight refreshments, and mentor checkpoints.",
+      description: "Hack clocks begin ticking. Continuous internet, power grids, midnight refreshments, and mentor checkpoints.",
       status: "upcoming"
     },
     {
       id: "t5",
       stage: "SUBMISSION FREEZE",
       date: "OCT 11, 2026",
-      time: "10:30 AM IST",
+      time: "09:00 AM IST",
       description: "Code commit freeze. Public GitHub repository link and working deployment submitted to the portal.",
       status: "upcoming"
     },
@@ -318,16 +309,16 @@ export const EVENT_CONFIG: EventConfig = {
       id: "t6",
       stage: "FINAL DEMO",
       date: "OCT 11, 2026",
-      time: "02:30 PM IST",
-      description: "Top 10 finalist teams present on the main auditorium stage before the grand jury panel.",
+      time: "09:30 AM IST",
+      description: "Each team is required to present their project to the panel of judges.",
       status: "upcoming"
     },
     {
       id: "t7",
       stage: "WINNERS & PRIZE CEREMONY",
       date: "OCT 11, 2026",
-      time: "04:30 PM IST",
-      description: "Announcement of 1st, 2nd, 3rd prizes, special awards, trophy handovers, and closing address.",
+      time: "10:30 PM IST",
+      description: "Announcement of 1st, 2nd, 3rd prizes, Certificates, and closing address.",
       status: "upcoming"
     }
   ],
@@ -356,7 +347,7 @@ export const EVENT_CONFIG: EventConfig = {
       id: "rule-4",
       category: "Guidelines",
       question: "What should participants bring?",
-      answer: "Participants must bring their personal laptops, chargers, extension cords, and their official college photo identity cards. High-speed networking, power outlets, meals, and overnight resting facilities are provided."
+      answer: "Participants must bring their personal laptops, chargers, extension cords, and their official college photo identity cards. Internet facilities, power outlets, meals, refreshments and overnight resting facilities are provided."
     },
     {
       id: "rule-5",
@@ -386,9 +377,9 @@ export const EVENT_CONFIG: EventConfig = {
   },
 
   socialLinks: {
-    instagram: "https://instagram.com/sakthihackfest", // TODO: OFFICIAL EVENT DATA
-    linkedin: "https://linkedin.com/company/sreesakthi-engineering-college", // TODO: OFFICIAL EVENT DATA
+    instagram: "https://www.instagram.com/ssec_karamadai_official/?utm_source=ig_web_button_share_sheet", // TODO: OFFICIAL EVENT DATA
+    linkedin: "https://www.linkedin.com/company/sree-sakthi-engineering-college/", // TODO: OFFICIAL EVENT DATA
     website: "https://www.sreesakthi.edu.in",
-    github: "https://github.com/sakthi-hackfest"
+    github: "https://github.com/sakthihackfest"
   }
 };

@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 scratchpad*.cjs
 scratchpad*.js
+.env
+.env*.local

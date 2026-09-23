@@ -1,37 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Download, Calendar, Home, CheckCircle, CheckCircle2, ShieldCheck, QrCode, AlertCircle } from 'lucide-react'
+import { Download, Home, CheckCircle, CheckCircle2, ShieldCheck, QrCode, AlertCircle } from 'lucide-react'
 import QRCode from 'qrcode'
 import type { StoredRegistration } from '../types'
 import { EVENT_CONFIG } from '../../config/eventConfig'
 
-function generateIcs(reg: StoredRegistration): string {
-  return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    "PRODID:-//SAKTHI HACKFEST'26//EN",
-    'BEGIN:VEVENT',
-    'DTSTART:20261010T090000',
-    'DTEND:20261011T180000',
-    "SUMMARY:SAKTHI HACKFEST'26",
-    `DESCRIPTION:Team ${reg.teamName} · ID: ${reg.registrationId}${reg.selectedThemeName || reg.selectedThemeId ? ` · Theme: ${reg.selectedThemeName || reg.selectedThemeId}` : ''}`,
-    'LOCATION:Sree Sakthi Engineering College\\, Karamadai\\, Coimbatore',
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n')
-}
-
 function downloadPass(reg: StoredRegistration, qrDataUrl: string) {
   const canvas = document.createElement('canvas')
   canvas.width = 800
-  canvas.height = 500
+  canvas.height = 600
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
   // Background
   ctx.fillStyle = '#050505'
-  ctx.fillRect(0, 0, 800, 500)
+  ctx.fillRect(0, 0, 800, 600)
 
   // Red top bar
   ctx.fillStyle = '#FF3B30'
@@ -40,7 +24,7 @@ function downloadPass(reg: StoredRegistration, qrDataUrl: string) {
   // Border
   ctx.strokeStyle = '#2A2A32'
   ctx.lineWidth = 1.5
-  ctx.strokeRect(20, 24, 760, 452)
+  ctx.strokeRect(20, 24, 760, 552)
 
   // Title & Header
   ctx.fillStyle = '#FF3B30'
@@ -61,41 +45,45 @@ function downloadPass(reg: StoredRegistration, qrDataUrl: string) {
   // Team Name
   ctx.fillStyle = '#FFFFFF'
   ctx.font = 'bold 32px "Orbitron", sans-serif'
-  ctx.fillText(reg.teamName.toUpperCase(), 50, 150)
+  ctx.fillText(reg.teamName.toUpperCase(), 50, 145)
 
   // Details
   const fields = [
     { label: 'REGISTRATION ID', val: reg.registrationId },
     { label: 'TEAM NAME', val: reg.teamName },
     { label: 'TEAM LEADER', val: reg.leaderName },
+    { label: 'TEAM LEADER COLLEGE', val: reg.leaderCollege || (reg as any).teamLeader?.college || reg.college || '—' },
     { label: 'TEAM SIZE', val: `${reg.teamSize} Members` },
-    { label: 'THEME', val: reg.selectedThemeName || reg.selectedThemeId || 'Open Innovation' },
+    { label: 'SELECTED DOMAIN', val: reg.selectedDomain || (reg as any).selectedDomain || 'Generative AI' },
+    { label: 'DEPARTMENT', val: `${reg.leaderDepartment} (${reg.leaderYear})` },
+    { label: 'SELECTED THEME', val: reg.selectedThemeName || reg.selectedThemeId || 'Open Innovation' },
+    { label: 'ACCOMMODATION', val: reg.accommodationRequired || 'No' },
     { label: 'EVENT DATE', val: 'October 10–11, 2026' },
   ]
 
-  let y = 190
+  let y = 172
   fields.forEach(({ label, val }) => {
     ctx.fillStyle = '#7A7A85'
     ctx.font = '10px "JetBrains Mono", monospace'
     ctx.fillText(label, 50, y)
 
     ctx.fillStyle = label === 'REGISTRATION ID' ? '#FF3B30' : '#FFFFFF'
-    ctx.font = label === 'REGISTRATION ID' ? 'bold 15px "JetBrains Mono", monospace' : '13px "JetBrains Mono", monospace'
-    ctx.fillText(String(val).slice(0, 48), 50, y + 18)
+    ctx.font = label === 'REGISTRATION ID' ? 'bold 14px "JetBrains Mono", monospace' : '12px "JetBrains Mono", monospace'
+    ctx.fillText(String(val).slice(0, 48), 50, y + 15)
 
-    y += 38
+    y += 33
   })
 
   // Draw QR
   if (qrDataUrl) {
     const qrImg = new Image()
     qrImg.onload = () => {
-      ctx.drawImage(qrImg, 580, 120, 160, 160)
+      ctx.drawImage(qrImg, 580, 130, 160, 160)
       ctx.fillStyle = '#9A9A9A'
       ctx.font = '10px "JetBrains Mono", monospace'
       ctx.textAlign = 'center'
-      ctx.fillText(reg.registrationId, 660, 305)
-      ctx.fillText('SCAN FOR VERIFICATION', 660, 322)
+      ctx.fillText(reg.registrationId, 660, 315)
+      ctx.fillText('SCAN FOR VERIFICATION', 660, 332)
 
       const link = document.createElement('a')
       link.download = `${reg.registrationId}_${reg.teamName.replace(/\s+/g, '_')}_PASS.png`
@@ -109,6 +97,7 @@ function downloadPass(reg: StoredRegistration, qrDataUrl: string) {
 export default function Success() {
   const location = useLocation()
   const navigate = useNavigate()
+  const params = useParams<{ id: string }>()
   const [reg, setReg] = useState<StoredRegistration | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [confettiFired, setConfettiFired] = useState(false)
@@ -124,17 +113,15 @@ export default function Success() {
       }
     }
 
-    if (!targetReg) {
-      // Look in localStorage fallback
-      const local = localStorage.getItem('shf26_registrations_v3')
-      if (local) {
-        try {
-          const list = JSON.parse(local)
-          if (Array.isArray(list) && list.length > 0) {
-            targetReg = list[0]
-          }
-        } catch (e) {}
-      }
+    if (!targetReg && params.id) {
+      try {
+        const local = localStorage.getItem('shf26_registrations_v3')
+        if (local) {
+          const list: StoredRegistration[] = JSON.parse(local)
+          const found = list.find(r => r.registrationId === params.id)
+          if (found) targetReg = found
+        }
+      } catch (e) {}
     }
 
     if (!targetReg) {
@@ -172,17 +159,6 @@ export default function Success() {
   }, [location, navigate, confettiFired])
 
   if (!reg) return null
-
-  const addToCalendar = () => {
-    const icsContent = generateIcs(reg)
-    const blob = new Blob([icsContent], { type: 'text/calendar' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${reg.registrationId}_SAKTHI_HACKFEST_2K26.ics`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
 
   return (
     <main className="pt-24 pb-28 px-4 sm:px-6 lg:px-8 min-h-screen flex items-start justify-center relative overflow-hidden">
@@ -307,9 +283,23 @@ export default function Success() {
                 </div>
 
                 <div>
+                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">TEAM LEADER COLLEGE</div>
+                  <div className="text-xs font-medium text-gray-200">
+                    {reg.leaderCollege || (reg as any).teamLeader?.college || (reg as any).teamLeaderCollege || reg.college || '—'}
+                  </div>
+                </div>
+
+                <div>
                   <div className="font-mono text-[10px] text-brand-muted tracking-wider">TEAM SIZE</div>
                   <div className="text-xs font-medium text-brand-orange font-mono">
                     {reg.teamSize} Members
+                  </div>
+                </div>
+
+                <div>
+                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">SELECTED DOMAIN</div>
+                  <div className="text-xs font-medium text-brand-orange font-mono">
+                    {reg.selectedDomain || (reg as any).selectedDomain || 'Generative AI'}
                   </div>
                 </div>
 
@@ -324,6 +314,13 @@ export default function Success() {
                   <div className="font-mono text-[10px] text-brand-muted tracking-wider">SELECTED THEME</div>
                   <div className="text-xs font-medium text-brand-orange font-mono">
                     {reg.selectedThemeName || reg.selectedThemeId || 'Open Innovation'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">ACCOMMODATION</div>
+                  <div className={`text-xs font-medium font-mono ${reg.accommodationRequired === 'Yes' ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    {reg.accommodationRequired || 'No'}
                   </div>
                 </div>
               </div>
@@ -361,27 +358,21 @@ export default function Success() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.35 }}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-4"
         >
           <button
+            type="button"
             onClick={() => downloadPass(reg, qrDataUrl)}
-            className="py-3.5 px-4 bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs font-bold tracking-wider rounded-lg flex items-center justify-center gap-2 transition-all shadow-[0_0_15px_rgba(255,59,48,0.25)] hover:scale-[1.02]"
+            className="w-full py-4 px-6 bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs sm:text-sm font-bold tracking-wider rounded-xl flex items-center justify-center gap-2.5 transition-all shadow-[0_0_20px_rgba(255,59,48,0.25)] hover:scale-[1.01] cursor-pointer"
           >
-            <Download size={16} /> DOWNLOAD PASS
-          </button>
-
-          <button
-            onClick={addToCalendar}
-            className="py-3.5 px-4 bg-brand-card hover:bg-brand-surface border border-brand-border text-white font-mono text-xs font-bold tracking-wider rounded-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-          >
-            <Calendar size={16} /> ADD TO CALENDAR
+            <Download size={18} /> DOWNLOAD PASS
           </button>
 
           <Link
             to="/"
-            className="py-3.5 px-4 bg-brand-card hover:bg-brand-surface border border-brand-border text-brand-muted hover:text-white font-mono text-xs font-bold tracking-wider rounded-lg flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
+            className="w-full py-4 px-6 bg-brand-card hover:bg-brand-surface border border-brand-border hover:border-brand-primary/40 text-brand-muted hover:text-white font-mono text-xs sm:text-sm font-bold tracking-wider rounded-xl flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01]"
           >
-            <Home size={16} /> BACK TO HOME
+            <Home size={18} /> BACK TO HOME
           </Link>
         </motion.div>
       </div>

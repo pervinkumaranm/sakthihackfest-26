@@ -10,11 +10,11 @@ export type EmailStatus = 'PENDING' | 'SENT' | 'FAILED'
 
 export interface MemberInfo {
   name: string
+  college?: string
   department: string
   yearOfStudy: string
   whatsapp: string
   email: string
-  college?: string
 }
 
 export interface StoredRegistration {
@@ -25,14 +25,16 @@ export interface StoredRegistration {
   // Team Info
   teamName: string
   teamSize: number
+  accommodationRequired?: 'Yes' | 'No'
+  selectedDomain?: string
 
   // Leader
   leaderName: string
+  leaderCollege?: string
   leaderDepartment: string
   leaderYear: string
   leaderWhatsapp: string
   leaderEmail: string
-  leaderCollege?: string
   college?: string
   selectedThemeName?: string
   selectedThemeId?: string
@@ -73,6 +75,7 @@ export interface AdminStats {
 export interface ApiResponse<T = unknown> {
   success: boolean
   message?: string
+  stage?: string
   registrationId?: string
   emailStatus?: EmailStatus
   paymentStatus?: string

@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
-import { CheckCircle2, Circle, Clock } from 'lucide-react'
+import { CheckCircle2, Circle, Clock, MapPin } from 'lucide-react'
 import { EVENT_CONFIG } from '../../config/event'
 
 export default function Timeline() {
@@ -39,7 +39,8 @@ export default function Timeline() {
             {EVENT_CONFIG.timeline.map((item, i) => {
               const isCompleted = item.status === 'completed'
               const isActive = item.status === 'active'
-              const IconEl = isCompleted ? CheckCircle2 : isActive ? Clock : Circle
+              const isReporting = item.stage === 'REPORTING'
+              const IconEl = isCompleted ? CheckCircle2 : isActive ? Clock : isReporting ? MapPin : Circle
 
               return (
                 <motion.div
@@ -55,11 +56,13 @@ export default function Timeline() {
                       ? 'border-green-500/50 bg-green-500/10'
                       : isActive
                       ? 'border-brand-primary bg-brand-primary/15 shadow-glow-red'
+                      : isReporting
+                      ? 'border-brand-primary/40 bg-brand-surface'
                       : 'border-brand-border bg-brand-surface'
                   }`}>
                     <IconEl
                       size={20}
-                      className={isCompleted ? 'text-green-500' : isActive ? 'text-brand-primary' : 'text-brand-mutedDark'}
+                      className={isCompleted ? 'text-green-500' : isActive ? 'text-brand-primary' : isReporting ? 'text-brand-primary' : 'text-brand-mutedDark'}
                     />
                   </div>
 

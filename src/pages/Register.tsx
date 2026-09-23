@@ -6,11 +6,20 @@ import { useNavigate, Link } from 'react-router-dom'
 import {
   ChevronRight, ChevronLeft, Upload, CheckCircle2, AlertCircle,
   Loader2, ShieldCheck, RefreshCw, Trash2,
-  Users, Phone, Mail, FileText, ArrowRight, User
+  Users, Phone, Mail, FileText, ArrowRight, User,
+  Sparkles, Globe, Palette, Coins
 } from 'lucide-react'
 import { EVENT_CONFIG } from '../../config/eventConfig'
 import { registrationFormSchema, RegistrationFormValues, ACADEMIC_YEARS } from '../../config/registrationSchema'
 import { apiService } from '../services/api'
+
+const HACKATHON_DOMAINS_CONFIG = [
+  { name: 'Generative AI', icon: Sparkles },
+  { name: 'Cryptography & Cyber Security', icon: ShieldCheck },
+  { name: 'Sustainable Development Goals', icon: Globe },
+  { name: 'Digital Prototyping & Design', icon: Palette },
+  { name: 'Web3 & FinTech', icon: Coins },
+] as const
 
 type Step = 1 | 2 | 3
 
@@ -35,7 +44,7 @@ export default function Register() {
   const [step, setStep] = useState<Step>(1)
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
-  const [submissionStage, setSubmissionStage] = useState<number>(0)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
   const [screenshotFileName, setScreenshotFileName] = useState('')
   const [screenshotError, setScreenshotError] = useState('')
@@ -49,20 +58,24 @@ export default function Register() {
     watch,
     trigger,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<RegistrationFormValues>({
     resolver: zodResolver(registrationFormSchema),
     defaultValues: {
       teamName: '',
       teamSize: 3,
+      selectedDomain: '',
+      accommodationRequired: 'No',
       leaderName: '',
+      leaderCollege: '',
       leaderDepartment: '',
       leaderYear: '3rd Year',
       leaderWhatsapp: '',
       leaderEmail: '',
       members: [
-        { name: '', department: '', yearOfStudy: '3rd Year', whatsapp: '', email: '' },
-        { name: '', department: '', yearOfStudy: '3rd Year', whatsapp: '', email: '' },
+        { name: '', college: '', department: '', yearOfStudy: '3rd Year', whatsapp: '', email: '' },
+        { name: '', college: '', department: '', yearOfStudy: '3rd Year', whatsapp: '', email: '' },
       ],
       paymentScreenshotData: '',
       paymentScreenshotName: '',
@@ -87,6 +100,7 @@ export default function Register() {
         next.push(
           current[i] || {
             name: '',
+            college: '',
             department: '',
             yearOfStudy: '3rd Year',
             whatsapp: '',
@@ -103,18 +117,24 @@ export default function Register() {
     const file = e.target.files?.[0]
     if (!file) return
     setScreenshotError('')
+    console.log("PAYMENT FILE:", file?.name)
+    console.log("PAYMENT FILE SIZE:", file?.size)
+    console.log("PAYMENT FILE TYPE:", file?.type)
+
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
-    if (!validTypes.includes(file.type)) {
-      setScreenshotError('Only PNG, JPG, JPEG, or WEBP image files are accepted.')
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      setScreenshotError('Invalid payment screenshot. Please upload a PNG, JPG, JPEG or WEBP image under 5 MB.')
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      setScreenshotError('File size exceeds 5 MB. Please upload a compressed image.')
+      setScreenshotError('Payment screenshot must be less than 5 MB.')
       return
     }
     const reader = new FileReader()
     reader.onload = event => {
       const base64 = event.target?.result as string
+      console.log("PAYMENT BASE64 CREATED")
+      console.log("Base64 length:", base64.length)
       setScreenshotPreview(base64)
       setScreenshotFileName(file.name)
       setValue('paymentScreenshotData', base64, { shouldValidate: true })
@@ -146,8 +166,8 @@ export default function Register() {
     setServerError('')
     if (step === 1) {
       const valid = await trigger([
-        'teamName', 'teamSize',
-        'leaderName', 'leaderDepartment', 'leaderYear', 'leaderWhatsapp', 'leaderEmail',
+        'teamName', 'teamSize', 'selectedDomain', 'accommodationRequired',
+        'leaderName', 'leaderCollege', 'leaderDepartment', 'leaderYear', 'leaderWhatsapp', 'leaderEmail',
       ])
       if (valid) {
         setStep(2)
@@ -169,65 +189,93 @@ export default function Register() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Final submission with Multi-Stage Progress UI
+  // Final submission directly awaiting real backend response
   const onSubmit = async (values: RegistrationFormValues) => {
+    // Prevent double submission
+    if (submitting) return
+
+    // Validate required payment details prior to submission
+    if (!values.paymentScreenshotData) {
+      setScreenshotError('Payment screenshot is required. Please upload a PNG, JPG, JPEG or WEBP image under 5 MB.')
+      setStep(3)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    if (!values.upiTransactionId || values.upiTransactionId.trim().length < 4) {
+      setServerError('Please provide a valid UPI Transaction ID / UTR reference.')
+      setStep(3)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
     setSubmitting(true)
     setServerError('')
-    setSubmissionStage(1) // STEP 1: VERIFYING DETAILS
+    setSubmissionError(null)
 
     try {
-      await new Promise(r => setTimeout(r, 400))
-      setSubmissionStage(2) // STEP 2: UPLOADING PAYMENT
-
-      const uploadStepDelay = new Promise(r => setTimeout(r, 600))
-      const submitPromise = apiService.submitRegistration({
+      const response = await apiService.submitRegistration({
         teamName: values.teamName.trim(),
         teamSize: values.teamSize,
+        selectedDomain: values.selectedDomain,
+        accommodationRequired: values.accommodationRequired === 'Yes' ? 'Yes' : 'No',
         leaderName: values.leaderName.trim(),
+        leaderCollege: values.leaderCollege.trim(),
         leaderDepartment: values.leaderDepartment.trim(),
         leaderYear: values.leaderYear.trim(),
         leaderWhatsapp: values.leaderWhatsapp.trim(),
         leaderEmail: values.leaderEmail.trim(),
         members: values.members.map(m => ({
           name: m.name.trim(),
+          college: m.college.trim(),
           department: m.department.trim(),
           yearOfStudy: m.yearOfStudy.trim(),
           whatsapp: m.whatsapp.trim(),
           email: m.email.trim(),
         })),
         paymentAmount: EVENT_CONFIG.registrationFee,
-        paymentScreenshotName: values.paymentScreenshotName || screenshotFileName,
+        paymentScreenshotName: values.paymentScreenshotName || screenshotFileName || 'payment_screenshot.png',
         paymentScreenshotData: values.paymentScreenshotData,
         upiTransactionId: values.upiTransactionId.trim(),
       })
 
-      await uploadStepDelay
-      setSubmissionStage(3) // STEP 3: SAVING REGISTRATION
-
-      const response = await submitPromise
-
-      if (response.success && response.data) {
-        setSubmissionStage(4) // STEP 4: SENDING CONFIRMATION
-        await new Promise(r => setTimeout(r, 550))
-
-        setSubmissionStage(5) // STEP 5: GENERATING REGISTRATION PASS
-        await new Promise(r => setTimeout(r, 550))
-
-        setSubmissionStage(6) // REGISTRATION CONFIRMED
-        await new Promise(r => setTimeout(r, 700))
-
-        navigate('/success', { state: { registration: response.data } })
+      if (response && response.success && response.data && response.registrationId) {
+        navigate(`/registration-success/${response.registrationId}`, {
+          state: { registration: response.data }
+        })
       } else {
-        setSubmitting(false)
-        setSubmissionStage(0)
-        setServerError(response.error || 'Registration submission failed. Please try again.')
+        setSubmissionError(
+          response?.error || 'Registration could not be completed. Please try again.'
+        )
       }
-    } catch (err) {
-      console.error('Registration error:', err)
+    } catch (err: any) {
+      console.error('Registration submission error:', err)
+      const isConnectionError =
+        err?.message?.includes('Failed to fetch') ||
+        err?.message?.includes('NetworkError') ||
+        err?.message?.includes('server') ||
+        err?.message?.includes('connect')
+      setSubmissionError(
+        isConnectionError
+          ? 'Unable to connect to the registration server. Please try again.'
+          : err?.message || 'Registration could not be completed. Please try again.'
+      )
+    } finally {
       setSubmitting(false)
-      setSubmissionStage(0)
-      setServerError('An unexpected error occurred. Please try again.')
     }
+  }
+
+  const handleRetry = () => {
+    setSubmissionError(null)
+    setServerError('')
+    onSubmit(getValues())
+  }
+
+  const handleEditDetails = () => {
+    setSubmissionError(null)
+    setServerError('')
+    setStep(1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const STEP_LABELS = ['TEAM & LEADER', 'TEAM MEMBERS', 'PAYMENT']
@@ -391,6 +439,87 @@ export default function Register() {
                     </div>
                     <FieldError message={errors.teamSize?.message} />
                   </div>
+
+                  {/* Hackathon Domain */}
+                  <div>
+                    <label className={labelClass}>
+                      HACKATHON DOMAIN <span className="text-brand-primary">*</span>
+                    </label>
+                    <p className="text-xs text-brand-muted font-mono mb-3">
+                      Choose the domain your team is most interested in.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      {HACKATHON_DOMAINS_CONFIG.map(domain => {
+                        const isSelected = watch('selectedDomain') === domain.name
+                        const IconComponent = domain.icon
+                        return (
+                          <button
+                            type="button"
+                            key={domain.name}
+                            onClick={() => setValue('selectedDomain', domain.name, { shouldValidate: true })}
+                            className={`p-3.5 rounded-lg border text-left font-mono tracking-wider transition-all duration-200 flex flex-col justify-between gap-2.5 cursor-pointer relative group ${
+                              isSelected
+                                ? 'border-brand-primary bg-brand-primary/15 text-white shadow-[0_0_15px_rgba(255,59,48,0.25)] font-bold'
+                                : 'border-brand-border bg-brand-bg text-brand-muted hover:border-brand-border/90 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <div
+                                className={`p-2 rounded-md transition-colors ${
+                                  isSelected
+                                    ? 'bg-brand-primary/20 text-brand-primary'
+                                    : 'bg-brand-card text-brand-muted group-hover:text-white'
+                                }`}
+                              >
+                                <IconComponent size={16} />
+                              </div>
+                              <span
+                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${
+                                  isSelected ? 'border-brand-primary' : 'border-brand-muted/40'
+                                }`}
+                              >
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-brand-primary" />}
+                              </span>
+                            </div>
+                            <div className="text-xs sm:text-[11px] lg:text-xs leading-snug font-bold">
+                              {domain.name}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <FieldError message={errors.selectedDomain?.message} />
+                  </div>
+
+                  {/* Accommodation Required */}
+                  <div>
+                    <label className={labelClass}>
+                      ACCOMMODATION REQUIRED <span className="text-brand-primary">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 max-w-xs">
+                      {(['Yes', 'No'] as const).map(opt => {
+                        const isSelected = watch('accommodationRequired') === opt
+                        return (
+                          <button
+                            type="button"
+                            key={opt}
+                            onClick={() => setValue('accommodationRequired', opt, { shouldValidate: true })}
+                            className={`py-3 px-4 rounded-lg border text-center font-mono text-xs sm:text-sm tracking-wider transition-all duration-200 flex items-center justify-center gap-2.5 ${
+                              isSelected
+                                ? 'border-brand-primary bg-brand-primary/15 text-white shadow-[0_0_15px_rgba(255,59,48,0.25)] font-bold'
+                                : 'border-brand-border bg-brand-bg text-brand-muted hover:border-brand-border/90 hover:text-white'
+                            }`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected ? 'border-brand-primary' : 'border-brand-muted/60'}`}>
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-brand-primary" />}
+                            </span>
+                            <span>{opt}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <FieldError message={errors.accommodationRequired?.message} />
+                  </div>
                 </div>
 
                 {/* Team Leader Details Card */}
@@ -420,6 +549,20 @@ export default function Register() {
                         className={inputClass}
                       />
                       <FieldError message={errors.leaderName?.message} />
+                    </div>
+
+                    {/* College Name */}
+                    <div className="sm:col-span-2">
+                      <label className={labelClass}>
+                        COLLEGE NAME <span className="text-brand-primary">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        {...register('leaderCollege')}
+                        placeholder="Enter your college name"
+                        className={inputClass}
+                      />
+                      <FieldError message={errors.leaderCollege?.message} />
                     </div>
 
                     {/* Department */}
@@ -503,132 +646,148 @@ export default function Register() {
                 transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
-                {/* Header Card */}
-                <div className="bg-brand-card/90 border border-brand-border p-6 rounded-xl backdrop-blur-md">
-                  <h2 className="font-display font-black text-xl text-white tracking-wide flex items-center gap-2">
-                    <Users className="text-brand-orange" size={20} />
-                    TEAM MEMBERS DETAILS
-                  </h2>
-                  <p className="text-xs text-brand-muted font-mono mt-1">
-                    Add details of the remaining team members. The team leader has already been registered in Step 1.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="font-mono text-[11px] text-brand-primary bg-brand-primary/10 border border-brand-primary/30 px-2.5 py-1 rounded">
-                      TEAM: {watchedValues.teamName}
-                    </span>
-                    <span className="font-mono text-[11px] text-brand-orange bg-brand-orange/10 border border-brand-orange/30 px-2.5 py-1 rounded">
-                      LEADER: {watchedValues.leaderName}
-                    </span>
-                    <span className="font-mono text-[11px] text-white/50 bg-white/5 border border-white/10 px-2.5 py-1 rounded">
-                      {selectedTeamSize - 1} MORE MEMBER{selectedTeamSize - 1 > 1 ? 'S' : ''} REQUIRED
-                    </span>
+                {/* Full-Width Unified Team Members Card */}
+                <div className="bg-brand-card/90 border border-brand-border p-6 sm:p-8 rounded-xl shadow-2xl backdrop-blur-md space-y-8">
+                  {/* Header & Team Summary */}
+                  <div className="border-b border-brand-border/60 pb-5">
+                    <h2 className="font-display font-black text-xl sm:text-2xl text-white tracking-wide flex items-center gap-2">
+                      <Users className="text-brand-orange" size={22} />
+                      TEAM MEMBERS DETAILS
+                    </h2>
+                    <p className="text-xs text-brand-muted font-mono mt-1">
+                      Add details of the remaining team members.
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                      <span className="font-mono text-xs text-brand-primary bg-brand-primary/10 border border-brand-primary/30 px-3 py-1 rounded">
+                        TEAM: {watchedValues.teamName || '—'}
+                      </span>
+                      <span className="font-mono text-xs text-brand-orange bg-brand-orange/10 border border-brand-orange/30 px-3 py-1 rounded">
+                        LEADER: {watchedValues.leaderName || '—'}
+                      </span>
+                      <span className="font-mono text-xs text-white/70 bg-white/5 border border-white/10 px-3 py-1 rounded">
+                        {selectedTeamSize - 1} MORE MEMBER{selectedTeamSize - 1 > 1 ? 'S' : ''} REQUIRED
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Member Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  {fields.map((field, index) => {
-                    const memberNumber = index + 2
-                    const memberErrors = errors.members?.[index]
-                    return (
-                      <motion.div
-                        key={field.id}
-                        initial={{ opacity: 0, y: 15 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.25, delay: index * 0.06 }}
-                        className="bg-brand-card/90 border border-brand-border p-5 rounded-xl shadow-xl backdrop-blur-md space-y-4 flex flex-col"
-                      >
-                        <div className="flex items-center justify-between border-b border-brand-border/60 pb-3">
-                          <h3 className="font-display font-black text-lg text-white tracking-wide">
-                            MEMBER {String(memberNumber).padStart(2, '0')}
-                          </h3>
-                          <span className="font-mono text-xs text-brand-orange">CO-ENGINEER</span>
-                        </div>
-
-                        {/* Name */}
-                        <div>
-                          <label className={labelClass}>
-                            NAME <span className="text-brand-primary">*</span>
-                          </label>
-                          <input
-                            {...register(`members.${index}.name` as const)}
-                            placeholder={`Member ${String(memberNumber).padStart(2, '0')} full name`}
-                            className={inputClass}
-                          />
-                          <FieldError message={memberErrors?.name?.message} />
-                        </div>
-
-                        {/* Department */}
-                        <div>
-                          <label className={labelClass}>
-                            DEPARTMENT <span className="text-brand-primary">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            {...register(`members.${index}.department` as const)}
-                            placeholder="Enter your department / branch"
-                            className={inputClass}
-                          />
-                          <FieldError message={memberErrors?.department?.message} />
-                        </div>
-
-                        {/* Year of Study */}
-                        <div>
-                          <label className={labelClass}>
-                            YEAR OF STUDY <span className="text-brand-primary">*</span>
-                          </label>
-                          <select
-                            {...register(`members.${index}.yearOfStudy` as const)}
-                            className={selectClass}
-                          >
-                            {ACADEMIC_YEARS.map(y => (
-                              <option key={y} value={y} className="bg-brand-card">{y}</option>
-                            ))}
-                          </select>
-                          <FieldError message={memberErrors?.yearOfStudy?.message} />
-                        </div>
-
-                        {/* WhatsApp & Email */}
-                        <div className="grid grid-cols-1 gap-3">
-                          <div>
-                            <label className={labelClass}>
-                              WHATSAPP <span className="text-brand-primary">*</span>
-                            </label>
-                            <div className="flex items-center gap-0">
-                              <span className="flex items-center gap-1 px-3 py-3 bg-brand-surface border border-r-0 border-brand-border rounded-l-lg font-mono text-xs text-brand-muted">
-                                <Phone size={11} className="text-brand-primary" /> +91
-                              </span>
-                              <input
-                                {...register(`members.${index}.whatsapp` as const)}
-                                placeholder="10-digit number"
-                                maxLength={10}
-                                className="flex-1 bg-brand-bg border border-brand-border rounded-r-lg text-white text-sm px-3 py-3 focus:outline-none focus:border-brand-primary transition-colors font-mono placeholder-brand-muted/40"
-                              />
-                            </div>
-                            <FieldError message={memberErrors?.whatsapp?.message} />
+                  {/* Member Form Sections */}
+                  <div className="space-y-8">
+                    {fields.map((field, index) => {
+                      const memberNumber = index + 2
+                      const memberErrors = errors.members?.[index]
+                      return (
+                        <div
+                          key={field.id}
+                          className={index > 0 ? 'pt-8 border-t border-brand-border/60 space-y-5' : 'space-y-5'}
+                        >
+                          {/* Member Compact Header */}
+                          <div className="flex items-center justify-between border-b border-brand-border/40 pb-2.5">
+                            <h3 className="font-display font-black text-lg text-white tracking-wide">
+                              MEMBER {String(memberNumber).padStart(2, '0')}
+                            </h3>
+                            <span className="font-mono text-xs text-brand-orange tracking-widest uppercase">
+                              CO-ENGINEER
+                            </span>
                           </div>
 
-                          <div>
-                            <label className={labelClass}>
-                              E-MAIL <span className="text-brand-primary">*</span>
-                            </label>
-                            <div className="flex items-center">
-                              <span className="flex items-center gap-1 px-3 py-3 bg-brand-surface border border-r-0 border-brand-border rounded-l-lg font-mono text-xs text-brand-muted">
-                                <Mail size={11} className="text-brand-primary" />
-                              </span>
+                          {/* Member Form 2-Column Grid on Desktop, 1-Column on Mobile */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                            {/* Row 1: NAME & COLLEGE NAME */}
+                            <div>
+                              <label className={labelClass}>
+                                NAME <span className="text-brand-primary">*</span>
+                              </label>
                               <input
-                                {...register(`members.${index}.email` as const)}
-                                type="email"
-                                placeholder="member@email.com"
-                                className="flex-1 bg-brand-bg border border-brand-border rounded-r-lg text-white text-sm px-3 py-3 focus:outline-none focus:border-brand-primary transition-colors font-mono placeholder-brand-muted/40"
+                                {...register(`members.${index}.name` as const)}
+                                placeholder={`Member ${String(memberNumber).padStart(2, '0')} full name`}
+                                className={inputClass}
                               />
+                              <FieldError message={memberErrors?.name?.message} />
                             </div>
-                            <FieldError message={memberErrors?.email?.message} />
+
+                            <div>
+                              <label className={labelClass}>
+                                COLLEGE NAME <span className="text-brand-primary">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                {...register(`members.${index}.college` as const)}
+                                placeholder="Enter college name"
+                                className={inputClass}
+                              />
+                              <FieldError message={memberErrors?.college?.message} />
+                            </div>
+
+                            {/* Row 2: DEPARTMENT & YEAR OF STUDY */}
+                            <div>
+                              <label className={labelClass}>
+                                DEPARTMENT <span className="text-brand-primary">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                {...register(`members.${index}.department` as const)}
+                                placeholder="Enter department / branch"
+                                className={inputClass}
+                              />
+                              <FieldError message={memberErrors?.department?.message} />
+                            </div>
+
+                            <div>
+                              <label className={labelClass}>
+                                YEAR OF STUDY <span className="text-brand-primary">*</span>
+                              </label>
+                              <select
+                                {...register(`members.${index}.yearOfStudy` as const)}
+                                className={selectClass}
+                              >
+                                {ACADEMIC_YEARS.map(y => (
+                                  <option key={y} value={y} className="bg-brand-card">{y}</option>
+                                ))}
+                              </select>
+                              <FieldError message={memberErrors?.yearOfStudy?.message} />
+                            </div>
+
+                            {/* Row 3: WHATSAPP & E-MAIL */}
+                            <div>
+                              <label className={labelClass}>
+                                WHATSAPP <span className="text-brand-primary">*</span>
+                              </label>
+                              <div className="flex items-center gap-0">
+                                <span className="flex items-center gap-1 px-3 py-3 bg-brand-surface border border-r-0 border-brand-border rounded-l-lg font-mono text-xs text-brand-muted">
+                                  <Phone size={12} className="text-brand-primary" /> +91
+                                </span>
+                                <input
+                                  {...register(`members.${index}.whatsapp` as const)}
+                                  placeholder="10-digit number"
+                                  maxLength={10}
+                                  className="flex-1 bg-brand-bg border border-brand-border rounded-r-lg text-white text-sm px-4 py-3 focus:outline-none focus:border-brand-primary transition-colors font-mono placeholder-brand-muted/40"
+                                />
+                              </div>
+                              <FieldError message={memberErrors?.whatsapp?.message} />
+                            </div>
+
+                            <div>
+                              <label className={labelClass}>
+                                E-MAIL <span className="text-brand-primary">*</span>
+                              </label>
+                              <div className="flex items-center">
+                                <span className="flex items-center gap-1 px-3 py-3 bg-brand-surface border border-r-0 border-brand-border rounded-l-lg font-mono text-xs text-brand-muted">
+                                  <Mail size={12} className="text-brand-primary" />
+                                </span>
+                                <input
+                                  {...register(`members.${index}.email` as const)}
+                                  type="email"
+                                  placeholder="member@email.com"
+                                  className="flex-1 bg-brand-bg border border-brand-border rounded-r-lg text-white text-sm px-4 py-3 focus:outline-none focus:border-brand-primary transition-colors font-mono placeholder-brand-muted/40"
+                                />
+                              </div>
+                              <FieldError message={memberErrors?.email?.message} />
+                            </div>
                           </div>
                         </div>
-                      </motion.div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -833,6 +992,10 @@ export default function Register() {
                           <span className="text-brand-muted block">TEAM SIZE:</span>
                           <span className="text-white font-bold">{watchedValues.teamSize} Members</span>
                         </div>
+                        <div>
+                          <span className="text-brand-muted block">ACCOMMODATION:</span>
+                          <span className="text-white font-bold">{watchedValues.accommodationRequired || 'No'}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -844,6 +1007,10 @@ export default function Register() {
                           <span className="text-white">{watchedValues.leaderName || '—'}</span>
                         </div>
                         <div>
+                          <span className="text-brand-muted block">COLLEGE:</span>
+                          <span className="text-white truncate">{watchedValues.leaderCollege || '—'}</span>
+                        </div>
+                        <div>
                           <span className="text-brand-muted block">DEPT & YEAR:</span>
                           <span className="text-white">{watchedValues.leaderDepartment} · {watchedValues.leaderYear}</span>
                         </div>
@@ -851,7 +1018,7 @@ export default function Register() {
                           <span className="text-brand-muted block">WHATSAPP:</span>
                           <span className="text-white">+91 {watchedValues.leaderWhatsapp}</span>
                         </div>
-                        <div>
+                        <div className="col-span-2">
                           <span className="text-brand-muted block">EMAIL:</span>
                           <span className="text-white truncate">{watchedValues.leaderEmail}</span>
                         </div>
@@ -867,6 +1034,7 @@ export default function Register() {
                               <div key={i} className="flex items-center gap-2 text-white/80">
                                 <span className="text-brand-muted">M{i + 2}:</span>
                                 <span>{m.name}</span>
+                                {m.college && <span className="text-brand-muted">({m.college})</span>}
                                 {m.department && <span className="text-brand-muted">· {m.department}</span>}
                               </div>
                             ) : null
@@ -910,6 +1078,46 @@ export default function Register() {
                     </label>
                     <FieldError message={errors.confirmedCorrect?.message} />
                   </div>
+
+                  {/* Inline Submission Error */}
+                  {submissionError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+                        <div>
+                          <div className="font-bold text-sm text-red-100 mb-1 font-mono tracking-wide">
+                            REGISTRATION FAILED
+                          </div>
+                          <p className="text-xs text-red-200/90 leading-relaxed font-sans">
+                            {submissionError}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex items-center gap-3 font-mono text-xs">
+                        <button
+                          type="button"
+                          onClick={handleRetry}
+                          disabled={submitting}
+                          className="py-2.5 px-4 rounded-lg bg-brand-primary hover:bg-brand-primary/90 text-white font-bold tracking-wider transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,59,48,0.3)] cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw size={14} />
+                          TRY AGAIN
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleEditDetails}
+                          disabled={submitting}
+                          className="py-2.5 px-4 rounded-lg bg-brand-card border border-brand-border hover:border-brand-border/90 text-brand-muted hover:text-white transition-all font-bold tracking-wider cursor-pointer disabled:opacity-50"
+                        >
+                          MODIFY DETAILS
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -923,7 +1131,7 @@ export default function Register() {
                   type="button"
                   onClick={handleBack}
                   disabled={submitting}
-                  className="px-5 py-3 rounded-lg border border-brand-border hover:border-brand-muted text-white font-mono text-xs tracking-wider flex items-center gap-1.5 transition-colors"
+                  className="px-5 py-3 rounded-lg border border-brand-border hover:border-brand-muted text-white font-mono text-xs tracking-wider flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <ChevronLeft size={16} /> BACK
                 </button>
@@ -952,12 +1160,12 @@ export default function Register() {
                 <button
                   type="submit"
                   disabled={submitting || !screenshotPreview}
-                  className="px-7 py-3 rounded-lg bg-gradient-to-r from-brand-orange to-brand-primary hover:opacity-95 text-white font-display font-black text-xs sm:text-sm tracking-widest flex items-center gap-2 shadow-[0_0_25px_rgba(255,59,48,0.4)] transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none"
+                  className="px-7 py-3 rounded-lg bg-gradient-to-r from-brand-orange to-brand-primary hover:opacity-95 text-white font-display font-black text-xs sm:text-sm tracking-widest flex items-center gap-2 shadow-[0_0_25px_rgba(255,59,48,0.4)] transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                 >
                   {submitting ? (
-                    <><Loader2 size={16} className="animate-spin" /> PROCESSING REGISTRATION...</>
+                    <><Loader2 size={16} className="animate-spin" /> SUBMITTING...</>
                   ) : (
-                    <>COMPLETE REGISTRATION <ArrowRight size={16} /></>
+                    <>SUBMIT REGISTRATION <ArrowRight size={16} /></>
                   )}
                 </button>
               )}
@@ -965,144 +1173,6 @@ export default function Register() {
           </div>
         </form>
       </div>
-
-      {/* Multi-Stage Submission Progress Overlay */}
-      <AnimatePresence>
-        {submitting && submissionStage > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-brand-surface border border-brand-border/90 p-6 sm:p-8 rounded-2xl max-w-md w-full shadow-[0_0_50px_rgba(255,59,48,0.2)] text-left relative overflow-hidden"
-            >
-              {/* Top ambient gradient */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-orange via-brand-primary to-emerald-400" />
-
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <div className="font-mono text-[10px] text-brand-primary tracking-widest uppercase">
-                    SYSTEM WORKFLOW
-                  </div>
-                  <h3 className="font-display font-black text-xl text-white tracking-wide">
-                    {submissionStage === 6 ? 'REGISTRATION CONFIRMED' : 'PROCESSING REGISTRATION...'}
-                  </h3>
-                </div>
-                <div className="p-2.5 rounded-xl bg-brand-card border border-brand-border">
-                  {submissionStage === 6 ? (
-                    <CheckCircle2 size={24} className="text-emerald-400" />
-                  ) : (
-                    <Loader2 size={24} className="text-brand-primary animate-spin" />
-                  )}
-                </div>
-              </div>
-
-              {/* Multi-stage Progress Steps */}
-              <div className="space-y-3.5 font-mono text-xs">
-                {[
-                  { stepNum: 1, title: 'VERIFYING DETAILS' },
-                  { stepNum: 2, title: 'UPLOADING PAYMENT' },
-                  { stepNum: 3, title: 'SAVING REGISTRATION' },
-                  { stepNum: 4, title: 'SENDING CONFIRMATION' },
-                  { stepNum: 5, title: 'GENERATING REGISTRATION PASS' },
-                ].map(({ stepNum, title }) => {
-                  const isDone = submissionStage > stepNum
-                  const isCurrent = submissionStage === stepNum
-
-                  return (
-                    <div
-                      key={stepNum}
-                      className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
-                        isCurrent
-                          ? 'bg-brand-primary/10 border-brand-primary/40 text-white shadow-[0_0_15px_rgba(255,59,48,0.15)]'
-                          : isDone
-                          ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
-                          : 'bg-brand-card/40 border-brand-border/50 text-brand-muted/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 flex items-center justify-center">
-                          {isDone ? (
-                            <CheckCircle2 size={16} className="text-emerald-400" />
-                          ) : isCurrent ? (
-                            <Loader2 size={15} className="animate-spin text-brand-primary" />
-                          ) : (
-                            <span className="w-2 h-2 rounded-full bg-brand-border" />
-                          )}
-                        </div>
-                        <div>
-                          <div className="text-[10px] tracking-widest opacity-60">STEP {stepNum}</div>
-                          <div className="font-bold tracking-wider">{title}</div>
-                        </div>
-                      </div>
-
-                      <div className="text-[10px] uppercase font-bold tracking-widest">
-                        {isDone ? 'DONE' : isCurrent ? 'IN PROGRESS' : 'WAITING'}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Confirmed Banner */}
-              {submissionStage === 6 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-center text-xs font-bold tracking-widest"
-                >
-                  ✓ REGISTRATION CONFIRMED · FINALIZING PASS...
-                </motion.div>
-              )}
-
-              {/* Progress bar */}
-              <div className="mt-6 pt-4 border-t border-brand-border/60">
-                <div className="flex justify-between font-mono text-[10px] text-brand-muted mb-1.5">
-                  <span>SYSTEM PROGRESS</span>
-                  <span>
-                    {submissionStage === 1
-                      ? '20%'
-                      : submissionStage === 2
-                      ? '40%'
-                      : submissionStage === 3
-                      ? '60%'
-                      : submissionStage === 4
-                      ? '80%'
-                      : submissionStage === 5
-                      ? '95%'
-                      : '100%'}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full bg-brand-card rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-brand-orange to-brand-primary"
-                    animate={{
-                      width:
-                        submissionStage === 1
-                          ? '20%'
-                          : submissionStage === 2
-                          ? '40%'
-                          : submissionStage === 3
-                          ? '60%'
-                          : submissionStage === 4
-                          ? '80%'
-                          : submissionStage === 5
-                          ? '95%'
-                          : '100%',
-                    }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </main>
   )
 }

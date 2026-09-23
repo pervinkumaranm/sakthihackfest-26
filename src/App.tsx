@@ -44,6 +44,8 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/success" element={<Success />} />
+            <Route path="/registration-success/:id" element={<Success />} />
+            <Route path="/registration-success" element={<Success />} />
             <Route path="/rules" element={<Rules />} />
             <Route path="/faq" element={<FAQ />} />
             <Route path="/contact" element={<Contact />} />

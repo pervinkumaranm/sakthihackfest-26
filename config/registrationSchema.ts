@@ -2,6 +2,16 @@ import { z } from 'zod';
 
 export const ACADEMIC_YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'] as const;
 
+export const HACKATHON_DOMAINS = [
+  'Generative AI',
+  'Cryptography & Cyber Security',
+  'Sustainable Development Goals',
+  'Digital Prototyping & Design',
+  'Web3 & FinTech',
+] as const;
+
+export type HackathonDomain = typeof HACKATHON_DOMAINS[number];
+
 const whatsappSchema = z.string().regex(/^[6-9]\d{9}$/, 'Must be a valid 10-digit Indian WhatsApp number');
 const emailSchema = z.string().email('Valid email address required');
 const departmentSchema = z
@@ -11,9 +21,16 @@ const departmentSchema = z
   .max(100, 'Department name cannot exceed 100 characters');
 const yearSchema = z.string().min(1, 'Year of study is required');
 
-// Member schema (no college)
+const collegeSchema = z
+  .string()
+  .trim()
+  .min(2, 'Please enter your college name.')
+  .max(120, 'College name cannot exceed 120 characters');
+
+// Member schema (includes college)
 export const memberInfoSchema = z.object({
   name: z.string().trim().min(2, 'Full name must be at least 2 characters').max(60),
+  college: collegeSchema,
   department: departmentSchema,
   yearOfStudy: yearSchema,
   whatsapp: whatsappSchema,
@@ -30,9 +47,16 @@ export const registrationFormSchema = z.object({
     .max(40, 'Team name cannot exceed 40 characters'),
 
   teamSize: z.number().min(2).max(4),
+  selectedDomain: z.string().min(1, 'Please select a hackathon domain.'),
+
+  // Team-level Accommodation (Required: Yes / No)
+  accommodationRequired: z.enum(['Yes', 'No'], {
+    message: 'Please select if accommodation is required',
+  }),
 
   // Leader details
   leaderName: z.string().trim().min(2, 'Leader full name is required').max(60),
+  leaderCollege: collegeSchema,
   leaderDepartment: departmentSchema,
   leaderYear: yearSchema,
   leaderWhatsapp: whatsappSchema,

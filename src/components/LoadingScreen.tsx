@@ -157,10 +157,15 @@ export default function LoadingScreen({ onComplete }: LoadingScreenProps) {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-center"
               >
-                <div className="font-display text-4xl sm:text-5xl font-black tracking-widest text-white mb-2">
-                  SAKTHI<span className="text-brand-primary"> HACKFEST</span>
+                <div className="font-display font-black text-center tracking-tight">
+                  <div className="text-3xl sm:text-5xl text-white tracking-widest drop-shadow-[0_2px_14px_rgba(255,255,255,0.15)]">
+                    SAKTHI
+                  </div>
+                  <div className="text-3xl sm:text-5xl tracking-widest mt-1 whitespace-nowrap">
+                    <span className="text-brand-primary drop-shadow-[0_0_20px_rgba(255,59,48,0.5)]">HACKFEST</span>
+                    <span className="text-brand-orange drop-shadow-[0_0_20px_rgba(255,149,0,0.45)]">'26</span>
+                  </div>
                 </div>
-                <div className="font-display text-2xl sm:text-3xl font-black tracking-[0.3em] text-brand-orange">'26</div>
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}

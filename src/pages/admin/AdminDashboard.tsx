@@ -77,8 +77,16 @@ function PaymentVerificationModal({ reg, onClose, onUpdateStatus }: {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-brand-border sticky top-0 bg-brand-surface z-10">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs text-brand-primary font-bold">{reg.registrationId}</span>
+              {reg.selectedDomain && (
+                <>
+                  <span className="text-brand-border">·</span>
+                  <span className="font-mono text-xs text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
+                    {reg.selectedDomain}
+                  </span>
+                </>
+              )}
               {(reg.selectedThemeName || reg.selectedThemeId) && (
                 <>
                   <span className="text-brand-border">·</span>
@@ -166,16 +174,26 @@ function PaymentVerificationModal({ reg, onClose, onUpdateStatus }: {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
               <div>
                 <span className="text-brand-muted block">REGISTRATION ID:</span>
                 <span className="text-white font-bold text-sm">{reg.registrationId}</span>
+              </div>
+              <div>
+                <span className="text-brand-muted block">HACKATHON DOMAIN:</span>
+                <span className="text-cyan-400 font-bold text-sm">{reg.selectedDomain || 'Generative AI'}</span>
               </div>
               <div>
                 <span className="text-brand-muted block">AMOUNT:</span>
                 <span className="text-emerald-400 font-bold text-sm">₹{reg.paymentAmount || 1000}</span>
               </div>
               <div>
+                <span className="text-brand-muted block">ACCOMMODATION:</span>
+                <span className={`font-bold text-sm ${reg.accommodationRequired === 'Yes' ? 'text-amber-400' : 'text-zinc-300'}`}>
+                  {reg.accommodationRequired || 'No'}
+                </span>
+              </div>
+              <div className="sm:col-span-2 md:col-span-4">
                 <span className="text-brand-muted block">UPI TRANSACTION ID:</span>
                 <span className="text-white font-bold text-sm select-all">
                   {reg.upiTransactionId || 'Not provided'}
@@ -231,6 +249,9 @@ function PaymentVerificationModal({ reg, onClose, onUpdateStatus }: {
                 <span>TEAM LEADER: {reg.leaderName}</span>
                 <span className="text-[10px] bg-brand-primary/10 px-2 py-0.5 rounded">PRIMARY</span>
               </div>
+              {reg.leaderCollege && (
+                <div className="text-brand-muted">College: <span className="text-white font-medium">{reg.leaderCollege}</span></div>
+              )}
               <div className="text-brand-muted">Dept & Year: {reg.leaderDepartment} · {reg.leaderYear}</div>
               <div className="text-brand-muted">Contact: {reg.leaderWhatsapp} · {reg.leaderEmail}</div>
             </div>
@@ -242,6 +263,9 @@ function PaymentVerificationModal({ reg, onClose, onUpdateStatus }: {
                   <span>MEMBER 0{idx + 2}: {m.name}</span>
                   <span className="text-[10px] text-brand-orange">CO-ENGINEER</span>
                 </div>
+                {m.college && (
+                  <div className="text-brand-muted">College: <span className="text-white font-medium">{m.college}</span></div>
+                )}
                 <div className="text-brand-muted">Dept & Year: {m.department} · {m.yearOfStudy}</div>
                 <div className="text-brand-muted">Contact: {m.whatsapp} · {m.email}</div>
               </div>
@@ -339,6 +363,7 @@ export default function AdminDashboard() {
       r.registrationId.toLowerCase().includes(q) ||
       r.teamName.toLowerCase().includes(q) ||
       (r.leaderDepartment && r.leaderDepartment.toLowerCase().includes(q)) ||
+      (r.selectedDomain && r.selectedDomain.toLowerCase().includes(q)) ||
       r.leaderName.toLowerCase().includes(q) ||
       (r.leaderEmail && r.leaderEmail.toLowerCase().includes(q)) ||
       (r.upiTransactionId && r.upiTransactionId.toLowerCase().includes(q))
@@ -478,7 +503,7 @@ export default function AdminDashboard() {
                 <tr>
                   <th className="py-3.5 px-4">REG ID</th>
                   <th className="py-3.5 px-4">TEAM & LEADER</th>
-                  <th className="py-3.5 px-4">THEME</th>
+                  <th className="py-3.5 px-4">DOMAIN & THEME</th>
                   <th className="py-3.5 px-4">SIZE</th>
                   <th className="py-3.5 px-4">PAYMENT STATUS</th>
                   <th className="py-3.5 px-4">REG STATUS</th>
@@ -498,12 +523,27 @@ export default function AdminDashboard() {
                     <tr key={r.registrationId} className="hover:bg-brand-surface/60 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-white">{r.registrationId}</td>
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-white">{r.teamName}</div>
+                        <div className="font-bold text-white flex items-center gap-2">
+                          {r.teamName}
+                          {r.accommodationRequired === 'Yes' && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              ACCOM
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-brand-muted">{r.leaderName} ({r.leaderDepartment} · {r.leaderWhatsapp})</div>
+                        {r.leaderCollege && (
+                          <div className="text-[10px] text-brand-muted/80">College: {r.leaderCollege}</div>
+                        )}
                         <div className="text-[10px] text-brand-muted/70">{r.leaderEmail}</div>
                       </td>
-                      <td className="py-3.5 px-4 text-brand-orange">
-                        {r.selectedThemeName || r.selectedThemeId || 'Open Innovation'}
+                      <td className="py-3.5 px-4">
+                        {r.selectedDomain && (
+                          <div className="text-cyan-400 font-bold mb-0.5">{r.selectedDomain}</div>
+                        )}
+                        <div className="text-brand-orange text-[11px]">
+                          {r.selectedThemeName || r.selectedThemeId || 'Open Innovation'}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">{r.teamSize}</td>
                       <td className="py-3.5 px-4">

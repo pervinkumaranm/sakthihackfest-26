@@ -16,7 +16,8 @@
 
 // ── Central Configuration ──────────────────────────────────────────────────
 const CONFIG = {
-  // Target Spreadsheet ID: 1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk
+  // Target Spreadsheet ID: leave empty or use your spreadsheet ID
+  // If the script is bound to the sheet (Extensions > Apps Script), it auto-detects!
   SPREADSHEET_ID: "1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk",
   SHEET_NAME: "Registrations",
 
@@ -30,8 +31,20 @@ const CONFIG = {
   COLLEGE_CAMPUS: "Karamadai, Coimbatore",
   REGISTRATION_FEE: 1000,
   EMAIL_SENDER_NAME: "Team Sakthi HackFest'26",
+  OFFICIAL_EMAIL: "sakthihackfest@gmail.com",
   TIMEZONE: "Asia/Kolkata"
 };
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function buildJsonResponse(obj, statusCode) {
+  return jsonResponse(obj);
+}
 
 // ── HTTP POST Handler ──────────────────────────────────────────────────────
 function doPost(e) {
@@ -39,28 +52,31 @@ function doPost(e) {
   try {
     lock.waitLock(30000);
 
-    console.log("Incoming request");
-    if (e && e.postData && e.postData.contents) {
-      console.log(e.postData.contents);
-    } else {
-      return buildJsonResponse({
+    console.log("POST REQUEST RECEIVED");
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse({
         success: false,
+        stage: "request",
         errorCode: "INVALID_DATA",
-        message: "No request body provided."
-      }, 400);
+        message: "Request body is empty."
+      });
     }
 
+    console.log("RAW REQUEST RECEIVED");
     let body;
     try {
       body = JSON.parse(e.postData.contents);
     } catch (parseErr) {
-      return buildJsonResponse({
+      console.error("JSON parse error:", parseErr);
+      return jsonResponse({
         success: false,
+        stage: "request",
         errorCode: "INVALID_DATA",
-        message: "Malformed JSON payload."
-      }, 400);
+        message: "Malformed JSON payload: " + parseErr
+      });
     }
 
+    console.log("REQUEST PARSED SUCCESSFULLY");
     const action = body.action || "SUBMIT_REGISTRATION";
 
     if (action === "RETRY_EMAIL") {
@@ -73,13 +89,14 @@ function doPost(e) {
 
     return handleRegistrationSubmission(body.data || body);
 
-  } catch (err) {
-    console.error("doPost exception: " + err);
-    return buildJsonResponse({
+  } catch (error) {
+    console.error("doPost exception:", error);
+    return jsonResponse({
       success: false,
+      stage: "server",
       errorCode: "REGISTRATION_FAILED",
-      message: "An internal server error occurred while processing registration: " + err.toString()
-    }, 500);
+      message: (error && error.message) || "Registration server error"
+    });
   } finally {
     try { lock.releaseLock(); } catch (_) {}
   }
@@ -138,23 +155,29 @@ function handleRegistrationSubmission(payload) {
   // 2. Open the exact "Registrations" sheet strictly
   const sheet = getOrCreateRegistrationSheet();
 
-  console.log("Spreadsheet ID:");
-  console.log(CONFIG.SPREADSHEET_ID);
-  console.log("Sheet:");
-  console.log(sheet.getName());
+  console.log("Spreadsheet ID: " + CONFIG.SPREADSHEET_ID);
+  console.log("Sheet: " + sheet.getName());
 
   // Extract clean fields
   const teamName = String(payload.teamName || "").trim();
   const teamSize = parseInt(payload.teamSize, 10) || 3;
   const theme = String(payload.theme || payload.selectedThemeName || payload.selectedThemeId || "General Track").trim();
+  const accommodationRequired = String(payload.accommodationRequired || "No").trim() === "Yes" ? "Yes" : "No";
+  const selectedDomain = String(payload.selectedDomain || payload.domain || "").trim();
 
   // Leader fields - support both teamLeader and leader structures
   const leader = payload.teamLeader || payload.leader || {};
   const leaderName = String(payload.leaderName || leader.name || "").trim();
+  const leaderCollege = String(payload.leaderCollege || leader.college || "").trim();
   const leaderDept = String(payload.leaderDepartment || leader.department || "").trim();
   const leaderYear = String(payload.leaderYear || leader.year || leader.yearOfStudy || "").trim();
   const leaderWhatsapp = String(payload.leaderWhatsapp || leader.whatsapp || "").trim();
   const leaderEmail = String(payload.leaderEmail || leader.email || "").trim();
+
+  console.log("TEAM NAME: " + teamName);
+  console.log("LEADER EMAIL: " + leaderEmail);
+  console.log("Team name: " + teamName);
+  console.log("Team leader email: " + leaderEmail);
 
   // Payment fields
   const payment = payload.payment || {};
@@ -162,9 +185,14 @@ function handleRegistrationSubmission(payload) {
   const screenshotBase64 = payload.paymentScreenshotData || payment.screenshotBase64 || "";
   const screenshotName = payload.paymentScreenshotName || payment.screenshotName || "payment_screenshot.png";
 
+  if (screenshotBase64) {
+    console.log("Payment screenshot received (length: " + screenshotBase64.length + ")");
+  }
+
   // 3. Duplicate detection
   const duplicate = checkDuplicateSubmission(sheet, teamName, leaderEmail, upiTxnId);
   if (duplicate) {
+    console.log("Duplicate registration detected for ID: " + duplicate.registrationId);
     return buildJsonResponse({
       success: true,
       isDuplicate: true,
@@ -177,8 +205,8 @@ function handleRegistrationSubmission(payload) {
 
   // 4. Generate Unique Random Registration ID: SHF26-XXXXXX
   const registrationId = generateUniqueRegistrationId(sheet);
-  console.log("Registration ID:");
-  console.log(registrationId);
+  console.log("GENERATED ID: " + registrationId);
+  console.log("STEP 3: Registration ID: " + registrationId);
 
   const now = new Date();
   const timestampStr = formatTimestamp(now);
@@ -187,40 +215,49 @@ function handleRegistrationSubmission(payload) {
   let driveFileUrl = "";
   let driveFileId = "";
 
+  console.log("DRIVE UPLOAD START");
+  console.log("REGISTRATION ID:", registrationId);
+
   if (screenshotBase64) {
     try {
       const uploadResult = savePaymentScreenshotToDrive(registrationId, screenshotBase64, screenshotName);
       driveFileUrl = uploadResult.fileUrl;
       driveFileId = uploadResult.fileId;
+      console.log("DRIVE UPLOAD COMPLETE");
+      console.log("STEP 4: Payment upload complete. Drive File ID: " + driveFileId);
     } catch (driveErr) {
       console.error("Drive upload failure: " + driveErr);
       const errMsg = driveErr.toString();
       if (errMsg.includes("PAYMENT_SCREENSHOT_TOO_LARGE")) {
-        return buildJsonResponse({
+        return jsonResponse({
           success: false,
+          stage: "payment_upload",
           errorCode: "PAYMENT_SCREENSHOT_TOO_LARGE",
           message: "Payment screenshot exceeds the 5 MB file size limit."
-        }, 400);
+        });
       }
       if (errMsg.includes("INVALID_PAYMENT_SCREENSHOT")) {
-        return buildJsonResponse({
+        return jsonResponse({
           success: false,
+          stage: "payment_upload",
           errorCode: "INVALID_PAYMENT_SCREENSHOT",
           message: "Invalid image format. Only PNG, JPG, JPEG, and WEBP are accepted."
-        }, 400);
+        });
       }
-      return buildJsonResponse({
+      return jsonResponse({
         success: false,
+        stage: "payment_upload",
         errorCode: "DRIVE_UPLOAD_ERROR",
-        message: "Failed to upload payment screenshot to Google Drive. Please retry."
-      }, 500);
+        message: "Payment screenshot upload failed: " + errMsg
+      });
     }
   } else {
-    return buildJsonResponse({
+    return jsonResponse({
       success: false,
+      stage: "payment_upload",
       errorCode: "INVALID_PAYMENT_SCREENSHOT",
-      message: "Payment screenshot is required."
-    }, 400);
+      message: "Payment screenshot is missing. Please upload the screenshot again."
+    });
   }
 
   // 6. Structure Member details according to Team Size
@@ -230,18 +267,21 @@ function handleRegistrationSubmission(payload) {
   const m4 = members[2] || {};
 
   const m2Name = teamSize >= 2 ? String(m2.name || "").trim() : "";
+  const m2College = teamSize >= 2 ? String(m2.college || "").trim() : "";
   const m2Dept = teamSize >= 2 ? String(m2.department || "").trim() : "";
   const m2Year = teamSize >= 2 ? String(m2.yearOfStudy || m2.year || "").trim() : "";
   const m2Phone = teamSize >= 2 ? String(m2.whatsapp || "").trim() : "";
   const m2Email = teamSize >= 2 ? String(m2.email || "").trim() : "";
 
   const m3Name = teamSize >= 3 ? String(m3.name || "").trim() : "";
+  const m3College = teamSize >= 3 ? String(m3.college || "").trim() : "";
   const m3Dept = teamSize >= 3 ? String(m3.department || "").trim() : "";
   const m3Year = teamSize >= 3 ? String(m3.yearOfStudy || m3.year || "").trim() : "";
   const m3Phone = teamSize >= 3 ? String(m3.whatsapp || "").trim() : "";
   const m3Email = teamSize >= 3 ? String(m3.email || "").trim() : "";
 
   const m4Name = teamSize >= 4 ? String(m4.name || "").trim() : "";
+  const m4College = teamSize >= 4 ? String(m4.college || "").trim() : "";
   const m4Dept = teamSize >= 4 ? String(m4.department || "").trim() : "";
   const m4Year = teamSize >= 4 ? String(m4.yearOfStudy || m4.year || "").trim() : "";
   const m4Phone = teamSize >= 4 ? String(m4.whatsapp || "").trim() : "";
@@ -265,6 +305,7 @@ function handleRegistrationSubmission(payload) {
     timestamp: timestampStr,
     teamname: teamName,
     teamsize: teamSize,
+    selecteddomain: selectedDomain,
     selectedtheme: theme,
     teamleadername: leaderName,
     teamleaderdepartment: leaderDept,
@@ -294,12 +335,20 @@ function handleRegistrationSubmission(payload) {
     registrationstatus: "CONFIRMED",
     emailstatus: "PENDING",
     emailsentat: "",
-    lastupdated: timestampStr
+    lastupdated: timestampStr,
+    accommodationrequired: accommodationRequired,
+    leadercollegename: leaderCollege,
+    member2collegename: m2College,
+    member3collegename: m3College,
+    member4collegename: m4College
   };
 
+  console.log("SHEET WRITE START");
   const appendResult = appendRegistrationRowByHeaders(sheet, dataMap);
   const rowIndex = appendResult.rowIndex;
   const headerCols = appendResult.headerCols;
+  console.log("SHEET WRITE COMPLETE");
+  console.log("STEP 5: Sheet write complete. Row: " + rowIndex);
 
   // 8. Send Automated Confirmation Email ONLY to Team Leader
   let emailStatus = "PENDING";
@@ -310,8 +359,11 @@ function handleRegistrationSubmission(payload) {
     teamName: teamName,
     teamSize: teamSize,
     teamMemberNames: teamMemberNames,
+    selectedDomain: selectedDomain,
+    accommodationRequired: accommodationRequired,
     theme: theme,
     leaderName: leaderName,
+    leaderCollege: leaderCollege,
     leaderDept: leaderDept,
     leaderYear: leaderYear,
     leaderWhatsapp: leaderWhatsapp,
@@ -337,18 +389,25 @@ function handleRegistrationSubmission(payload) {
     if (headerCols["emailstatus"]) sheet.getRange(rowIndex, headerCols["emailstatus"]).setValue("FAILED");
     if (headerCols["lastupdated"]) sheet.getRange(rowIndex, headerCols["lastupdated"]).setValue(formatTimestamp(new Date()));
   }
+  console.log("EMAIL STATUS: " + emailStatus);
+  console.log("STEP 6: Email status: " + emailStatus);
 
-  // Return clean JSON success response
-  return buildJsonResponse({
+  const responseObj = {
     success: true,
     registrationId: registrationId,
     emailStatus: emailStatus,
-    paymentStatus: "SUBMITTED",
+    paymentStatus: "RECEIVED",
+    message: emailStatus === "SENT"
+      ? "Registration completed successfully"
+      : "Registration saved. Confirmation email is pending.",
     data: {
       registrationId: registrationId,
       teamName: teamName,
       teamSize: teamSize,
+      selectedDomain: selectedDomain,
+      accommodationRequired: accommodationRequired,
       leaderName: leaderName,
+      leaderCollege: leaderCollege,
       leaderDepartment: leaderDept,
       leaderYear: leaderYear,
       leaderWhatsapp: leaderWhatsapp,
@@ -359,20 +418,84 @@ function handleRegistrationSubmission(payload) {
       paymentScreenshotDriveUrl: driveFileUrl,
       driveFileId: driveFileId,
       emailStatus: emailStatus,
-      paymentStatus: "PENDING",
+      paymentStatus: "RECEIVED",
       registrationStatus: "CONFIRMED",
       timestamp: timestampStr
     }
+  };
+
+  console.log("REGISTRATION COMPLETE");
+  console.log("Final response: Registration " + registrationId + " success, email " + emailStatus);
+  return jsonResponse(responseObj);
+}
+
+// ── Required New Headers Auto-Check ─────────────────────────────────────────
+const REQUIRED_NEW_HEADERS = [
+  "Accommodation Required",
+  "Selected Domain",
+  "Leader College Name",
+  "Member 2 College Name",
+  "Member 3 College Name",
+  "Member 4 College Name"
+];
+
+function ensureRequiredHeaders(sheet) {
+  let lastCol = sheet.getLastColumn();
+  if (lastCol === 0) {
+    initSheetHeaders(sheet);
+    return;
+  }
+
+  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) {
+    return String(h || "").trim();
   });
+  const existingHeadersNorm = existingHeaders.map(function(h) {
+    return h.toLowerCase().replace(/[^a-z0-9]/g, "");
+  });
+
+  let hasMissing = false;
+  for (let i = 0; i < REQUIRED_NEW_HEADERS.length; i++) {
+    const norm = REQUIRED_NEW_HEADERS[i].toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (existingHeadersNorm.indexOf(norm) === -1) {
+      hasMissing = true;
+      break;
+    }
+  }
+
+  if (hasMissing) {
+    applyInlineLayoutToSheet();
+  }
+}
+
+// ── Header Map Helper ──────────────────────────────────────────────────────
+function getHeaderMap(sheet) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return {};
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const map = {};
+  headers.forEach(function(header, index) {
+    const raw = String(header || "").trim();
+    if (raw) {
+      map[raw] = index + 1;
+      const norm = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+      map[norm] = index + 1;
+    }
+  });
+  return map;
 }
 
 // ── Dynamic Header Mapper ──────────────────────────────────────────────────
 function appendRegistrationRowByHeaders(sheet, dataMap) {
-  const lastCol = sheet.getLastColumn();
-  if (lastCol === 0) {
-    throw new Error("No header columns found in Registrations sheet");
+  // 1. Verify headers safely without crashing registration
+  try {
+    ensureRequiredHeaders(sheet);
+  } catch (headerErr) {
+    Logger.log("ensureRequiredHeaders notice: " + headerErr.message);
   }
 
+  ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
+
+  const lastCol = sheet.getLastColumn();
   const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const row = [];
   const headerCols = {};
@@ -423,12 +546,20 @@ function validatePayload(payload) {
 
   const leader = payload.teamLeader || payload.leader || {};
   const leaderName = String(payload.leaderName || leader.name || "").trim();
+  const leaderCollege = String(payload.leaderCollege || leader.college || "").trim();
   const leaderDept = String(payload.leaderDepartment || leader.department || "").trim();
   const leaderYear = String(payload.leaderYear || leader.year || leader.yearOfStudy || "").trim();
   const leaderWhatsapp = String(payload.leaderWhatsapp || leader.whatsapp || "").trim();
   const leaderEmail = String(payload.leaderEmail || leader.email || "").trim();
 
+  // Validate Accommodation Required
+  const accommodationRequired = String(payload.accommodationRequired || "").trim();
+  if (accommodationRequired !== "Yes" && accommodationRequired !== "No") {
+    return { success: false, errorCode: "INVALID_DATA", message: "Accommodation required must be 'Yes' or 'No'." };
+  }
+
   if (!leaderName) return { success: false, errorCode: "INVALID_DATA", message: "Leader name is required." };
+  if (leaderCollege.length < 2) return { success: false, errorCode: "INVALID_DATA", message: "Leader college name is required." };
   if (!leaderDept) return { success: false, errorCode: "INVALID_DATA", message: "Leader department is required." };
   if (!leaderYear) return { success: false, errorCode: "INVALID_DATA", message: "Leader year of study is required." };
   if (!/^[6-9]\d{9}$/.test(leaderWhatsapp)) {
@@ -447,11 +578,13 @@ function validatePayload(payload) {
   for (let i = 0; i < requiredAdditionalMembers; i++) {
     const m = members[i] || {};
     const mName = String(m.name || "").trim();
+    const mCollege = String(m.college || "").trim();
     const mDept = String(m.department || "").trim();
     const mPhone = String(m.whatsapp || "").trim();
     const mEmail = String(m.email || "").trim();
 
     if (!mName) return { success: false, errorCode: "INVALID_DATA", message: "Member " + (i + 2) + " name is required." };
+    if (mCollege.length < 2) return { success: false, errorCode: "INVALID_DATA", message: "Member " + (i + 2) + " college name is required." };
     if (!mDept) return { success: false, errorCode: "INVALID_DATA", message: "Member " + (i + 2) + " department is required." };
     if (!/^[6-9]\d{9}$/.test(mPhone)) {
       return { success: false, errorCode: "INVALID_DATA", message: "Member " + (i + 2) + " WhatsApp must be a valid 10-digit number." };
@@ -553,7 +686,10 @@ function checkDuplicateSubmission(sheet, teamName, leaderEmail, upiTxnId) {
 // ── Google Drive Storage: Hierarchy & Upload ───────────────────────────────
 function savePaymentScreenshotToDrive(regId, base64Data, filename) {
   const parts = base64Data.split(",");
-  const rawBase64 = parts.length > 1 ? parts[1] : parts[0];
+  let rawBase64 = parts.length > 1 ? parts[1] : parts[0];
+  // Sanitize base64 string: remove whitespace, linebreaks, spaces
+  rawBase64 = rawBase64.replace(/\s+/g, "");
+
   const approxSize = Math.ceil((rawBase64.length * 3) / 4);
 
   // Maximum 5 MB = 5242880 bytes
@@ -563,16 +699,21 @@ function savePaymentScreenshotToDrive(regId, base64Data, filename) {
 
   let mimeType = "image/png";
   if (parts.length > 1 && parts[0].includes(":") && parts[0].includes(";")) {
-    mimeType = parts[0].split(":")[1].split(";")[0].toLowerCase();
+    mimeType = parts[0].split(":")[1].split(";")[0].toLowerCase().trim();
   }
 
-  const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+  // Normalize mime types
+  if (mimeType === "image/jpg" || mimeType === "image/pjpeg") {
+    mimeType = "image/jpeg";
+  }
+
+  const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
   if (!allowedTypes.includes(mimeType)) {
     throw new Error("INVALID_PAYMENT_SCREENSHOT");
   }
 
   let ext = "png";
-  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) ext = "jpg";
+  if (mimeType.includes("jpeg")) ext = "jpg";
   else if (mimeType.includes("webp")) ext = "webp";
 
   // Parent folder: SAKTHI HACKFEST 2K26
@@ -604,7 +745,8 @@ function savePaymentScreenshotToDrive(regId, base64Data, filename) {
 
   // Save screenshot file
   const targetFileName = "payment_screenshot." + ext;
-  const decodedBlob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, targetFileName);
+  const decodedBytes = Utilities.base64Decode(rawBase64);
+  const decodedBlob = Utilities.newBlob(decodedBytes, mimeType, targetFileName);
   const file = regFolder.createFile(decodedBlob);
 
   return {
@@ -620,10 +762,11 @@ function sendConfirmationEmail(data) {
   const htmlBody = buildConfirmationEmailHtml(data);
   const plainTextBody = buildConfirmationEmailPlainText(data);
 
-  // Send ONLY to Team Leader Email - No CC, no BCC, no team members, no admin
+  // Send ONLY to Team Leader Email - from sakthihackfest@gmail.com
   MailApp.sendEmail({
     to: data.leaderEmail,
-    name: "Team Sakthi HackFest'26",
+    name: CONFIG.EMAIL_SENDER_NAME,
+    replyTo: CONFIG.OFFICIAL_EMAIL,
     subject: subject,
     body: plainTextBody,
     htmlBody: htmlBody
@@ -641,6 +784,8 @@ function buildConfirmationEmailPlainText(d) {
     "Team name: " + d.teamName,
     "Team ID: " + d.registrationId,
     "Members: " + d.teamMemberNames,
+    "Hackathon Domain: " + (d.selectedDomain || "Generative AI"),
+    "Accommodation required: " + (d.accommodationRequired || "No"),
     "",
     "Payment status: Received, verification in progress. Your registration will be confirmed once your payment is verified. We will email you when it is.",
     "",
@@ -743,6 +888,14 @@ function buildConfirmationEmailHtml(d) {
                   <tr>
                     <td style="padding: 7px 0; color: #71717a; font-weight: 600; vertical-align: top;">Members:</td>
                     <td style="padding: 7px 0; color: #09090b; font-weight: 600; line-height: 1.6;">${escapeHtml(d.teamMemberNames)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 7px 0; color: #71717a; font-weight: 600;">Hackathon Domain:</td>
+                    <td style="padding: 7px 0; color: #09090b; font-weight: 700;">${escapeHtml(d.selectedDomain || "Generative AI")}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 7px 0; color: #71717a; font-weight: 600;">Accommodation:</td>
+                    <td style="padding: 7px 0; color: #09090b; font-weight: 700;">${escapeHtml(d.accommodationRequired || "No")}</td>
                   </tr>
                 </table>
 
@@ -982,25 +1135,278 @@ function handleStatusUpdate(body) {
   return buildJsonResponse({ success: false, message: "Registration not found." }, 404);
 }
 
-// ── Sheet Locator ──────────────────────────────────────────────────────────
-function getOrCreateRegistrationSheet() {
-  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-  if (!ss) {
-    throw new Error("Spreadsheet not found with ID: " + CONFIG.SPREADSHEET_ID);
+// ── Sheet & Drive Helpers ──────────────────────────────────────────────────
+const SHEET_HEADERS = [
+  "Registration ID",
+  "Timestamp",
+  "Team Name",
+  "Team Size",
+  "Accommodation Required",
+  "Selected Domain",
+  "Selected Theme",
+  "Team Leader Name",
+  "Leader College Name",
+  "Team Leader Department",
+  "Team Leader Year",
+  "Team Leader WhatsApp",
+  "Team Leader Email",
+  "Member 2 Name",
+  "Member 2 College Name",
+  "Member 2 Department",
+  "Member 2 Year",
+  "Member 2 WhatsApp",
+  "Member 2 Email",
+  "Member 3 Name",
+  "Member 3 College Name",
+  "Member 3 Department",
+  "Member 3 Year",
+  "Member 3 WhatsApp",
+  "Member 3 Email",
+  "Member 4 Name",
+  "Member 4 College Name",
+  "Member 4 Department",
+  "Member 4 Year",
+  "Member 4 WhatsApp",
+  "Member 4 Email",
+  "Payment Amount",
+  "UPI Transaction ID",
+  "Payment Screenshot URL",
+  "Google Drive File ID",
+  "Payment Status",
+  "Registration Status",
+  "Email Status",
+  "Email Sent At",
+  "Last Updated"
+];
+
+// ── One-Click Inline Layout Organizer for Google Sheet ────────────────────
+function applyInlineLayoutToSheet() {
+  const sheet = getOrCreateRegistrationSheet();
+  const lastCol = sheet.getLastColumn();
+  const lastRow = sheet.getLastRow();
+
+  if (lastCol === 0 || lastRow === 0) {
+    initSheetHeaders(sheet);
+    return;
   }
 
-  // Open strictly the "Registrations" sheet tab
-  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  // 1. Read existing headers and index them
+  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const oldHeaderMap = {};
+  existingHeaders.forEach(function(h, idx) {
+    const raw = String(h || "").trim();
+    if (raw) {
+      oldHeaderMap[raw.toLowerCase().replace(/[^a-z0-9]/g, "")] = idx;
+    }
+  });
+
+  // 2. Read existing data rows (if any)
+  const existingData = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+
+  // 3. Rebuild the entire sheet matrix according to SHEET_HEADERS
+  const newMatrix = [];
+  newMatrix.push(SHEET_HEADERS); // Row 1
+
+  for (let r = 0; r < existingData.length; r++) {
+    const oldRow = existingData[r];
+    const newRow = [];
+    for (let c = 0; c < SHEET_HEADERS.length; c++) {
+      const targetHeader = SHEET_HEADERS[c];
+      const targetNorm = targetHeader.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (targetNorm in oldHeaderMap) {
+        const oldColIdx = oldHeaderMap[targetNorm];
+        const val = oldRow[oldColIdx];
+        newRow.push(val !== undefined && val !== null ? val : "");
+      } else {
+        // New column: leave blank for older registrations
+        newRow.push("");
+      }
+    }
+    newMatrix.push(newRow);
+  }
+
+  // 4. Ensure sheet grid has at least SHEET_HEADERS.length columns before writing
+  ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
+
+  // 5. Safely clear and write the newly aligned matrix
+  sheet.clearContents();
+  sheet.getRange(1, 1, newMatrix.length, SHEET_HEADERS.length).setValues(newMatrix);
+
+  // 6. Apply dark header styling
+  const headerRange = sheet.getRange(1, 1, 1, SHEET_HEADERS.length);
+  headerRange.setBackground("#0f172a");
+  headerRange.setFontColor("#f8fafc");
+  headerRange.setFontWeight("bold");
+  headerRange.setFontSize(10);
+  headerRange.setHorizontalAlignment("center");
+  sheet.setRowHeight(1, 38);
+  sheet.setFrozenRows(1);
+
+  Logger.log("=================================================================");
+  Logger.log("✅ GOOGLE SHEET UPDATED TO INLINE LAYOUT SUCCESSFULLY!");
+  Logger.log("Total Columns: " + SHEET_HEADERS.length);
+  Logger.log("Migrated Existing Registrations: " + existingData.length);
+  Logger.log("=================================================================");
+}
+
+function ensureSheetColumnsCapacity(sheet, requiredColumns) {
+  try {
+    const currentMax = sheet.getMaxColumns();
+    if (currentMax < requiredColumns) {
+      sheet.insertColumnsAfter(currentMax, requiredColumns - currentMax);
+    }
+  } catch (err) {
+    Logger.log("Capacity check notice: " + err.message);
+  }
+}
+
+function addMissingHeadersToSheet() {
+  applyInlineLayoutToSheet();
+}
+
+function getSpreadsheet() {
+  const targetId = CONFIG.SPREADSHEET_ID || "1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk";
+  let ss = null;
+
+  try {
+    ss = SpreadsheetApp.openById(targetId);
+  } catch (err) {
+    console.warn("SpreadsheetApp.openById(" + targetId + ") notice: " + err);
+    try {
+      ss = SpreadsheetApp.getActiveSpreadsheet();
+    } catch (_) {}
+  }
+
+  if (!ss) {
+    throw new Error("Google Spreadsheet not found with ID: " + targetId);
+  }
+
+  return ss;
+}
+
+function initSheetHeaders(sheet) {
+  ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
+  sheet.getRange(1, 1, 1, SHEET_HEADERS.length).setValues([SHEET_HEADERS]);
+
+  const headerRange = sheet.getRange(1, 1, 1, SHEET_HEADERS.length);
+  headerRange.setBackground("#0f172a");
+  headerRange.setFontColor("#f8fafc");
+  headerRange.setFontWeight("bold");
+  headerRange.setFontSize(10);
+  headerRange.setHorizontalAlignment("center");
+  sheet.setRowHeight(1, 38);
+  sheet.setFrozenRows(1);
+}
+
+function getOrCreateRegistrationSheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) {
-    throw new Error("Registrations sheet not found in spreadsheet " + CONFIG.SPREADSHEET_ID);
+    sheet = ss.insertSheet(CONFIG.SHEET_NAME);
+  }
+
+  if (sheet.getLastColumn() === 0) {
+    initSheetHeaders(sheet);
   }
 
   return sheet;
 }
 
-// ── Test Function ──────────────────────────────────────────────────────────
+function ensureDriveFolderHierarchy() {
+  let parentFolder;
+  const parentFolders = DriveApp.getFoldersByName(CONFIG.DRIVE_PARENT_FOLDER_NAME);
+  if (parentFolders.hasNext()) {
+    parentFolder = parentFolders.next();
+  } else {
+    parentFolder = DriveApp.createFolder(CONFIG.DRIVE_PARENT_FOLDER_NAME);
+  }
+
+  let proofsFolder;
+  const proofsFolders = parentFolder.getFoldersByName(CONFIG.PROOFS_FOLDER_NAME);
+  if (proofsFolders.hasNext()) {
+    proofsFolder = proofsFolders.next();
+  } else {
+    proofsFolder = parentFolder.createFolder(CONFIG.PROOFS_FOLDER_NAME);
+  }
+
+  return proofsFolder;
+}
+
+// ── One-Click Initial Setup ────────────────────────────────────────────────
+function setupRegistrationSheet() {
+  Logger.log("Starting SAKTHI HACKFEST 2K26 One-Click Setup...");
+
+  // 1. Setup Google Sheet & 34 Column Headers
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SHEET_NAME);
+  }
+  initSheetHeaders(sheet);
+
+  // 2. Setup Google Drive Folders
+  const driveFolder = ensureDriveFolderHierarchy();
+
+  Logger.log("=================================================================");
+  Logger.log("✅ SETUP COMPLETED SUCCESSFULLY!");
+  Logger.log("Spreadsheet Name: " + ss.getName());
+  Logger.log("Spreadsheet ID: " + ss.getId());
+  Logger.log("Active Sheet Tab: " + sheet.getName() + " (34 Columns Initialized)");
+  Logger.log("Drive Proofs Folder: " + CONFIG.DRIVE_PARENT_FOLDER_NAME + " / " + CONFIG.PROOFS_FOLDER_NAME);
+  Logger.log("=================================================================");
+}
+
+// ── One-Click System Test (Sheet + Drive + Email) ───────────────────────────
+function testSystemConnection() {
+  Logger.log("=================================================================");
+  Logger.log("RUNNING SYSTEM DIAGNOSTIC TEST (Sheet + Drive + Email)...");
+
+  // 1. Test Sheet
+  const sheet = getOrCreateRegistrationSheet();
+  ensureRequiredHeaders(sheet);
+  Logger.log("✅ 1. Google Sheet: Connected (" + sheet.getName() + ", Columns: " + sheet.getLastColumn() + ")");
+
+  // 2. Test Drive
+  const proofsFolder = ensureDriveFolderHierarchy();
+  Logger.log("✅ 2. Google Drive: Connected (" + proofsFolder.getName() + ")");
+
+  // 3. Test Email
+  const targetEmail = Session.getActiveUser().getEmail() || CONFIG.OFFICIAL_EMAIL;
+  Logger.log("📧 3. Sending test email to: " + targetEmail + " from " + CONFIG.OFFICIAL_EMAIL);
+
+  MailApp.sendEmail({
+    to: targetEmail,
+    name: CONFIG.EMAIL_SENDER_NAME,
+    replyTo: CONFIG.OFFICIAL_EMAIL,
+    subject: "Sakthi HackFest'26 — System Test Verification",
+    body: "Congratulations! Your Google Apps Script backend is successfully connected to Google Sheets, Google Drive, and Email Automation.\n\nAll registrations will be automatically stored and confirmation emails will be sent to the Team Leader.",
+    htmlBody: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;">
+        <h2 style="color: #dc2626; margin-top: 0;">Sakthi HackFest'26 — System Test Passed ✅</h2>
+        <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+          Your backend infrastructure is fully operational and verified:
+        </p>
+        <ul style="color: #0f172a; font-size: 14px; line-height: 1.8;">
+          <li><strong>Google Sheet:</strong> Connected (34 Columns Ready)</li>
+          <li><strong>Google Drive:</strong> Payment Proofs Folder Ready</li>
+          <li><strong>Email Automation:</strong> Working via ${escapeHtml(CONFIG.OFFICIAL_EMAIL)}</li>
+        </ul>
+        <p style="color: #64748b; font-size: 12px; margin-top: 20px;">
+          Sakthi HackFest'26 Enterprise Backend Engine
+        </p>
+      </div>
+    `
+  });
+
+  Logger.log("✅ 3. Email sent successfully! Check inbox for: " + targetEmail);
+  Logger.log("=================================================================");
+}
+
 function testSheetWrite() {
-  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const ss = SpreadsheetApp.openById(
+    "1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk"
+  );
+
   const sheet = ss.getSheetByName("Registrations");
 
   if (!sheet) {
@@ -1011,16 +1417,118 @@ function testSheetWrite() {
     "TEST-SHF26",
     new Date(),
     "TEST TEAM",
-    2,
-    "Test Theme",
-    "Test Leader",
-    "CSE",
-    "2nd Year",
-    "9999999999",
-    "test@example.com"
+    2
   ]);
 
-  Logger.log("Test row inserted successfully into Registrations sheet");
+  Logger.log("Sheet write successful");
+}
+
+function testEmail() {
+  const targetEmail = Session.getActiveUser().getEmail() || CONFIG.OFFICIAL_EMAIL;
+  MailApp.sendEmail({
+    to: targetEmail,
+    subject: "SAKTHI HACKFEST'26 - Test Email",
+    htmlBody: `
+      <h2>SAKTHI HACKFEST'26</h2>
+      <p>This is a test email.</p>
+    `
+  });
+  Logger.log("TEST EMAIL SENT TO: " + targetEmail);
+}
+
+function testDrive() {
+  let parentFolder;
+  const parentFolders = DriveApp.getFoldersByName("SAKTHI HACKFEST 2K26");
+  if (parentFolders.hasNext()) {
+    parentFolder = parentFolders.next();
+  } else {
+    parentFolder = DriveApp.createFolder("SAKTHI HACKFEST 2K26");
+  }
+
+  let proofsFolder;
+  const proofsFolders = parentFolder.getFoldersByName("Payment Proofs");
+  if (proofsFolders.hasNext()) {
+    proofsFolder = proofsFolders.next();
+  } else {
+    proofsFolder = parentFolder.createFolder("Payment Proofs");
+  }
+
+  let testFolder;
+  const testFolders = proofsFolder.getFoldersByName("SHF26-TEST");
+  if (testFolders.hasNext()) {
+    testFolder = testFolders.next();
+  } else {
+    testFolder = proofsFolder.createFolder("SHF26-TEST");
+  }
+
+  Logger.log("TEST DRIVE SUCCESS: " + testFolder.getName());
+}
+
+function testFullRegistrationWrite() {
+  const sheet = getOrCreateRegistrationSheet();
+  const testId = "TEST-" + Math.floor(100000 + Math.random() * 900000);
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+
+  const testMap = {
+    registrationid: testId,
+    timestamp: formatTimestamp(new Date()),
+    teamname: "Test Team " + randomSuffix,
+    teamsize: 2,
+    selectedtheme: "Generative AI",
+    teamleadername: "Test Leader",
+    teamleaderdepartment: "CSE",
+    teamleaderyear: "3rd Year",
+    teamleaderwhatsapp: "9876543210",
+    teamleaderemail: CONFIG.OFFICIAL_EMAIL,
+    member2name: "Test Member 2",
+    member2department: "IT",
+    member2year: "3rd Year",
+    member2whatsapp: "9876543211",
+    member2email: "member2@example.com",
+    paymentamount: 1000,
+    upitransactionid: "UPI_TEST_" + randomSuffix,
+    paymentscreenshoturl: "https://drive.google.com",
+    googledrivefileid: "test_file_id",
+    paymentstatus: "PENDING",
+    registrationstatus: "CONFIRMED",
+    emailstatus: "TEST_MODE",
+    emailsentat: formatTimestamp(new Date()),
+    lastupdated: formatTimestamp(new Date()),
+    accommodationrequired: "Yes",
+    leadercollegename: "Sree Sakthi Engineering College",
+    member2collegename: "ABC Engineering College",
+    member3collegename: "",
+    member4collegename: ""
+  };
+
+  appendRegistrationRowByHeaders(sheet, testMap);
+  Logger.log("✅ Test row inserted successfully with ID: " + testId);
+}
+
+// ── One-Click Full Self-Heal & Test Function ───────────────────────────────
+function diagnoseAndFixSheet() {
+  Logger.log("=================================================================");
+  Logger.log("DIAGNOSING GOOGLE SHEET & WRITING CAPABILITY...");
+  const sheet = getOrCreateRegistrationSheet();
+  Logger.log("Sheet Name: " + sheet.getName());
+  Logger.log("Initial Max Grid Columns: " + sheet.getMaxColumns());
+  Logger.log("Initial Last Column with Data: " + sheet.getLastColumn());
+  Logger.log("Initial Rows: " + sheet.getLastRow());
+
+  // 1. Ensure grid capacity for 39 columns
+  ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
+  Logger.log("1. Grid capacity expanded to: " + sheet.getMaxColumns() + " columns.");
+
+  // 2. Re-align columns to new inline layout without losing any existing rows
+  applyInlineLayoutToSheet();
+  Logger.log("2. Inline layout applied successfully.");
+
+  // 3. Write test registration row
+  testSheetWrite();
+
+  Logger.log("=================================================================");
+  Logger.log("✅ ALL REPAIRS COMPLETED! Check Google Sheet now — new row and inline columns are visible!");
+  Logger.log("=================================================================");
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

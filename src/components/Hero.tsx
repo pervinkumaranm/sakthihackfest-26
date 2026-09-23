@@ -149,19 +149,20 @@ export default function Hero() {
           <div className="absolute bottom-0 left-0 w-5 h-5 sm:w-7 sm:h-7 border-b-2 border-l-2 border-[#FF3B30]" />
           <div className="absolute bottom-0 right-0 w-5 h-5 sm:w-7 sm:h-7 border-b-2 border-r-2 border-[#FF3B30]" />
 
-          {/* Three Stacked Heavy Futuristic Lines */}
+          {/* Two-Line Heavy Futuristic Title */}
           <h1 className="font-display font-black leading-[0.94] tracking-tight text-center">
             {/* SAKTHI (Crisp White) */}
             <span className="block text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] xl:text-[6.6rem] text-white tracking-[0.02em] drop-shadow-[0_2px_14px_rgba(255,255,255,0.15)]">
               SAKTHI
             </span>
-            {/* HACKFEST (Neon Red) */}
-            <span className="block text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] xl:text-[6.6rem] text-[#FF3B30] tracking-[0.01em] drop-shadow-[0_0_28px_rgba(255,59,48,0.5)] mt-0.5 sm:mt-1">
-              HACKFEST
-            </span>
-            {/* '26 (Vibrant Orange/Amber) */}
-            <span className="block text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] xl:text-[6.6rem] text-[#FF9500] tracking-[0.04em] drop-shadow-[0_0_28px_rgba(255,149,0,0.45)] mt-0.5 sm:mt-1">
-              '26
+            {/* HACKFEST'26 (Neon Red + Vibrant Orange on Same Line) */}
+            <span className="block text-3xl min-[360px]:text-[2.15rem] min-[400px]:text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] xl:text-[6.6rem] tracking-[0.01em] mt-1 sm:mt-2 whitespace-nowrap">
+              <span className="text-[#FF3B30] drop-shadow-[0_0_28px_rgba(255,59,48,0.5)]">
+                HACKFEST
+              </span>
+              <span className="text-[#FF9500] tracking-[0.04em] drop-shadow-[0_0_28px_rgba(255,149,0,0.45)]">
+                '26
+              </span>
             </span>
           </h1>
         </motion.div>
