@@ -226,7 +226,7 @@ function handleRegistrationSubmission(payload) {
       console.log("DRIVE UPLOAD COMPLETE");
       console.log("STEP 4: Payment upload complete. Drive File ID: " + driveFileId);
     } catch (driveErr) {
-      console.error("Drive upload failure: " + driveErr);
+      console.warn("Drive upload warning (continuing with Sheet and Email): " + driveErr);
       const errMsg = driveErr.toString();
       if (errMsg.includes("PAYMENT_SCREENSHOT_TOO_LARGE")) {
         return jsonResponse({
@@ -244,12 +244,8 @@ function handleRegistrationSubmission(payload) {
           message: "Invalid image format. Only PNG, JPG, JPEG, and WEBP are accepted."
         });
       }
-      return jsonResponse({
-        success: false,
-        stage: "payment_upload",
-        errorCode: "DRIVE_UPLOAD_ERROR",
-        message: "Payment screenshot upload failed: " + errMsg
-      });
+      driveFileUrl = "DRIVE_PENDING: " + errMsg;
+      driveFileId = "PENDING";
     }
   } else {
     return jsonResponse({

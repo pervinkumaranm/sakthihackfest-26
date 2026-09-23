@@ -51,44 +51,17 @@ export default defineConfig(({ mode }) => {
                         res.end(text)
                         return
                       } catch (followErr: any) {
-                        console.warn(
-                          '[Local Dev Serverless] Apps Script completed with HTTP 302. Redirect fetch to googleusercontent was reset by local network/ISP:',
+                        console.error(
+                          '[Local Dev Serverless Error] Google Apps Script responded with 302, but your local ISP blocked reading the response (ECONNRESET):',
                           followErr.message
                         )
-                        // Apps Script has already processed and saved the registration.
-                        // For local testing preview, return success confirmation.
-                        const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase()
-                        const generatedId = `SHF26-${randomSuffix}`
-                        const payloadData = body.data || body
                         res.setHeader('Content-Type', 'application/json')
-                        res.statusCode = 200
+                        res.statusCode = 502
                         res.end(
                           JSON.stringify({
-                            success: true,
-                            registrationId: generatedId,
-                            paymentStatus: 'RECEIVED',
-                            emailStatus: 'SENT',
-                            message: 'Registration completed successfully (Apps Script confirmed HTTP 302).',
-                            data: {
-                              registrationId: generatedId,
-                              teamName: payloadData.teamName || 'Hack Squad',
-                              teamSize: payloadData.teamSize || 3,
-                              selectedDomain: payloadData.selectedDomain || '',
-                              accommodationRequired: payloadData.accommodationRequired || 'No',
-                              leaderName: payloadData.teamLeader?.name || payloadData.leaderName || '',
-                              leaderCollege: payloadData.teamLeader?.college || payloadData.leaderCollege || '',
-                              leaderDepartment: payloadData.teamLeader?.department || payloadData.leaderDepartment || '',
-                              leaderYear: payloadData.teamLeader?.year || payloadData.leaderYear || '3rd Year',
-                              leaderWhatsapp: payloadData.teamLeader?.whatsapp || payloadData.leaderWhatsapp || '',
-                              leaderEmail: payloadData.teamLeader?.email || payloadData.leaderEmail || '',
-                              members: payloadData.members || [],
-                              paymentAmount: 1000,
-                              upiTransactionId: payloadData.upiTransactionId || '',
-                              paymentStatus: 'RECEIVED',
-                              emailStatus: 'SENT',
-                              registrationStatus: 'CONFIRMED',
-                              timestamp: new Date().toISOString(),
-                            },
+                            success: false,
+                            stage: 'gas_connection',
+                            message: 'Local network connection reset while reading Google Apps Script response. Please deploy to Vercel and verify Google Apps Script authorization.',
                           })
                         )
                         return
