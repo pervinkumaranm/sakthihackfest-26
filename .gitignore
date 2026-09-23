@@ -26,3 +26,7 @@ scratchpad*.cjs
 scratchpad*.js
 .env
 .env*.local
+*.pem
+*service-account*.json
+*credentials*.json
+google-key*.json

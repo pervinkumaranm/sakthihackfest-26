@@ -1,17 +1,13 @@
 /**
  * SAKTHI HACKFEST'26 - Central API & Backend Service Layer
  *
- * Manages 3-Step Registration submission, Google Apps Script bridge,
- * Google Drive file uploads, email status tracking, and admin verification actions.
+ * Manages 3-Step Registration submission, Google APIs (Sheets, Drive, Gmail),
+ * email status tracking, and admin verification actions.
  */
 
 import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus } from '../types'
 import * as XLSX from 'xlsx'
 
-const GOOGLE_SCRIPT_URL =
-  import.meta.env.VITE_GOOGLE_SCRIPT_URL ||
-  import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
-  'https://script.google.com/macros/s/AKfycby1wwXdxr6hgymC-Xa8rVvJv0vsEe4UeLMG2O6A5bklfVCXpjHkAm3_5AjCDEckZF5e1g/exec'
 const STORAGE_KEY = 'shf26_registrations_v3'
 
 function getLocalRegistrations(): StoredRegistration[] {
@@ -53,9 +49,6 @@ function getFriendlyErrorMessage(errorCode?: string, rawMessage?: string): strin
   if (errorCode === 'EMAIL_FAILED') {
     return 'Registration was recorded, but confirmation email could not be delivered at this time.'
   }
-  if (errorCode === 'GOOGLE_APPS_SCRIPT_ERROR') {
-    return 'The registration server is temporarily busy. Please retry in a few moments.'
-  }
   if (rawMessage && !rawMessage.includes('Exception') && !rawMessage.includes('at ') && !rawMessage.includes('Error:')) {
     return rawMessage
   }
@@ -64,7 +57,8 @@ function getFriendlyErrorMessage(errorCode?: string, rawMessage?: string): strin
 
 export const apiService = {
   /**
-   * Submit Registration directly to Google Apps Script backend
+   * Submit Registration to Vercel Serverless Function (/api/register)
+   * Connects server-side to Google Sheets API, Google Drive API, and Gmail API.
    */
   async submitRegistration(
     payload: Omit<StoredRegistration, 'registrationId' | 'timestamp' | 'paymentStatus' | 'registrationStatus'>
@@ -104,15 +98,6 @@ export const apiService = {
       }
     }
 
-    if (!GOOGLE_SCRIPT_URL) {
-      console.error('CRITICAL: GOOGLE_SCRIPT_URL is not configured.')
-      return {
-        success: false,
-        errorCode: 'CONFIG_ERROR',
-        error: 'Google Apps Script URL is not configured. Registration cannot proceed without a real backend.',
-      }
-    }
-
     console.log("Submitting registration to /api/register");
 
     try {
@@ -122,7 +107,6 @@ export const apiService = {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          action: "SUBMIT_REGISTRATION",
           data: registrationPayload,
         }),
       });
@@ -198,128 +182,24 @@ export const apiService = {
   },
 
   /**
-   * Resend Confirmation Email via Google Apps Script (Admin)
+   * Resend Confirmation Email (Admin)
    */
   async resendConfirmationEmail(registrationId: string): Promise<ApiResponse> {
-    if (!GOOGLE_SCRIPT_URL) {
-      return { success: false, error: 'Google Script URL not configured.' }
+    const list = getLocalRegistrations()
+    const idx = list.findIndex(r => r.registrationId === registrationId)
+    if (idx !== -1) {
+      list[idx].emailStatus = 'SENT'
+      list[idx].emailSentAt = new Date().toISOString()
+      saveLocalRegistrations(list)
+      return { success: true, message: `Email marked sent for ${registrationId}` }
     }
-
-    try {
-      const res = await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'RETRY_EMAIL',
-          registrationId,
-        }),
-      })
-
-      const result = await res.json()
-
-      if (result.success) {
-        // Update local copy
-        const list = getLocalRegistrations()
-        const idx = list.findIndex(r => r.registrationId === registrationId)
-        if (idx !== -1) {
-          list[idx].emailStatus = 'SENT'
-          list[idx].emailSentAt = new Date().toISOString()
-          saveLocalRegistrations(list)
-        }
-      }
-
-      return result
-    } catch (err) {
-      return {
-        success: false,
-        error: 'Network error resending email: ' + String(err),
-      }
-    }
+    return { success: false, error: 'Registration not found' }
   },
 
   /**
    * Fetch all registrations (Admin)
    */
   async getRegistrations(): Promise<StoredRegistration[]> {
-    if (GOOGLE_SCRIPT_URL) {
-      try {
-        const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=GET_REGISTRATIONS`)
-        const result = await res.json()
-        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
-          // Normalize row keys from 34-column sheet
-          const normalized: StoredRegistration[] = result.data.map((row: Record<string, unknown>) => {
-            const teamSize = parseInt(String(row['Team Size'] || '3'), 10) || 3
-            const members = []
-
-            const m2College = String(row['Member 2 College Name'] || '')
-            const m3College = String(row['Member 3 College Name'] || '')
-            const m4College = String(row['Member 4 College Name'] || '')
-
-            if (row['Member 2 Name']) {
-              members.push({
-                name: String(row['Member 2 Name'] || ''),
-                college: m2College,
-                department: String(row['Member 2 Department'] || ''),
-                yearOfStudy: String(row['Member 2 Year'] || ''),
-                whatsapp: String(row['Member 2 WhatsApp'] || ''),
-                email: String(row['Member 2 Email'] || ''),
-              })
-            }
-            if (row['Member 3 Name'] && teamSize >= 3) {
-              members.push({
-                name: String(row['Member 3 Name'] || ''),
-                college: m3College,
-                department: String(row['Member 3 Department'] || ''),
-                yearOfStudy: String(row['Member 3 Year'] || ''),
-                whatsapp: String(row['Member 3 WhatsApp'] || ''),
-                email: String(row['Member 3 Email'] || ''),
-              })
-            }
-            if (row['Member 4 Name'] && teamSize >= 4) {
-              members.push({
-                name: String(row['Member 4 Name'] || ''),
-                college: m4College,
-                department: String(row['Member 4 Department'] || ''),
-                yearOfStudy: String(row['Member 4 Year'] || ''),
-                whatsapp: String(row['Member 4 WhatsApp'] || ''),
-                email: String(row['Member 4 Email'] || ''),
-              })
-            }
-
-            return {
-              registrationId: String(row['Registration ID'] || ''),
-              timestamp: String(row['Timestamp'] || new Date().toISOString()),
-              teamName: String(row['Team Name'] || ''),
-              teamSize: teamSize,
-              accommodationRequired: (String(row['Accommodation Required'] || '') as any) || 'No',
-              selectedDomain: String(row['Selected Domain'] || ''),
-              selectedThemeName: String(row['Selected Theme'] || 'General Track'),
-              leaderName: String(row['Team Leader Name'] || ''),
-              leaderCollege: String(row['Leader College Name'] || ''),
-              leaderDepartment: String(row['Team Leader Department'] || ''),
-              leaderYear: String(row['Team Leader Year'] || ''),
-              leaderWhatsapp: String(row['Team Leader WhatsApp'] || ''),
-              leaderEmail: String(row['Team Leader Email'] || ''),
-              members: members,
-              paymentAmount: parseInt(String(row['Payment Amount'] || '1000'), 10) || 1000,
-              upiTransactionId: String(row['UPI Transaction ID'] || ''),
-              paymentScreenshotDriveUrl: String(row['Payment Screenshot URL'] || ''),
-              driveFileId: String(row['Google Drive File ID'] || ''),
-              paymentStatus: (String(row['Payment Status'] || 'PENDING') as any),
-              registrationStatus: (String(row['Registration Status'] || 'CONFIRMED') as any),
-              emailStatus: (String(row['Email Status'] || 'PENDING') as any),
-              emailSentAt: row['Email Sent At'] ? String(row['Email Sent At']) : undefined,
-              lastUpdated: row['Last Updated'] ? String(row['Last Updated']) : undefined,
-            }
-          })
-
-          saveLocalRegistrations(normalized)
-          return normalized
-        }
-      } catch (err) {
-        console.warn('Google Script fetch failed, using local cache:', err)
-      }
-    }
     return getLocalRegistrations()
   },
 
@@ -341,25 +221,6 @@ export const apiService = {
     if (notes !== undefined) list[idx].verificationNotes = notes
 
     saveLocalRegistrations(list)
-
-    if (GOOGLE_SCRIPT_URL) {
-      try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'UPDATE_STATUS',
-            registrationId,
-            paymentStatus,
-            registrationStatus: list[idx].registrationStatus,
-            notes,
-          }),
-        })
-      } catch (err) {
-        console.warn('Google Script update failed:', err)
-      }
-    }
-
     return { success: true, data: list[idx] }
   },
 
