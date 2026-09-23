@@ -45,7 +45,7 @@ Because you want emails to be sent from **`sakthihackfest@gmail.com`**, you **MU
    **`SAKTHI_HACKFEST_2K26_REGISTRATIONS`**
 4. Copy the **Spreadsheet ID** from your browser URL bar:
    ```
-   https://docs.google.com/spreadsheets/d/1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk/edit
+   https://docs.google.com/spreadsheets/d/1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0/edit
                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                                                    THIS IS YOUR SPREADSHEET ID
    ```

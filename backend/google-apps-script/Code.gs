@@ -2,7 +2,7 @@
  * SAKTHI HACKFEST 2K26 — Google Apps Script Enterprise Backend
  *
  * Connected strictly to:
- * SPREADSHEET_ID: 1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk
+ * SPREADSHEET_ID: 1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0
  * SHEET_NAME: Registrations
  *
  * Workflow:
@@ -18,7 +18,7 @@
 const CONFIG = {
   // Target Spreadsheet ID: leave empty or use your spreadsheet ID
   // If the script is bound to the sheet (Extensions > Apps Script), it auto-detects!
-  SPREADSHEET_ID: "1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk",
+  SPREADSHEET_ID: "1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0",
   SHEET_NAME: "Registrations",
 
   // Drive folder hierarchy: SAKTHI HACKFEST 2K26 -> Payment Proofs -> <REGISTRATION_ID>
@@ -1261,7 +1261,7 @@ function addMissingHeadersToSheet() {
 }
 
 function getSpreadsheet() {
-  const targetId = CONFIG.SPREADSHEET_ID || "1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk";
+  const targetId = CONFIG.SPREADSHEET_ID || "1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0";
   let ss = null;
 
   try {
@@ -1400,7 +1400,7 @@ function testSystemConnection() {
 
 function testSheetWrite() {
   const ss = SpreadsheetApp.openById(
-    "1OYdxruhylGwutte02g4SkShEAmmbF91lqNCgF1DxQUk"
+    "1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0"
   );
 
   const sheet = ss.getSheetByName("Registrations");
