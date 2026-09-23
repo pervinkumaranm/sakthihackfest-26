@@ -21,7 +21,26 @@ function getLocalRegistrations(): StoredRegistration[] {
 }
 
 function saveLocalRegistrations(list: StoredRegistration[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  try {
+    // Strip large base64 screenshot data from localStorage to prevent 5MB browser quota errors
+    const sanitizedList = list.map(item => {
+      const copy = { ...item }
+      if (copy.paymentScreenshotData && copy.paymentScreenshotData.length > 500) {
+        copy.paymentScreenshotData = ''
+      }
+      return copy
+    })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedList))
+  } catch (e) {
+    console.warn('LocalStorage save failed, attempting cleanup:', e)
+    try {
+      // Gracefully store only recent 5 registrations without images
+      const trimmed = list.slice(0, 5).map(item => ({ ...item, paymentScreenshotData: '' }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+    } catch {
+      // Ignore if browser storage is totally full
+    }
+  }
 }
 
 function getFriendlyErrorMessage(errorCode?: string, rawMessage?: string): string {
