@@ -36,6 +36,7 @@ export interface EventConfigType {
   departments: string[];
   academicYears: string[];
   publicPaymentQrUrl: string;
+  paymentQRName: string;
   upiId: string;
   upiPayeeName: string;
   contact: {
@@ -103,7 +104,8 @@ export const EVENT_CONFIG: EventConfigType = {
   ],
   // Organizers can set the actual hosted payment QR URL or use local fallback
   publicPaymentQrUrl: '/payment-qr.png',
-  upiId: 'Ms Sree Sakthi Engineering College Hackfest', // TODO: Official event UPI ID
+  paymentQRName: 'Ms Sree Sakthi Engineering College Hackfest',
+  upiId: 'Ms Sree Sakthi Engineering College Hackfest',
   upiPayeeName: 'Ms Sree Sakthi Engineering College Hackfest',
   contact: {
     email: 'sakthihackfest@gmail.com',

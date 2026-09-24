@@ -123,11 +123,17 @@ export default function Register() {
 
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
     if (!validTypes.includes(file.type.toLowerCase())) {
-      setScreenshotError('Invalid payment screenshot. Please upload a PNG, JPG, JPEG or WEBP image under 5 MB.')
+      const errorMsg = 'Invalid payment screenshot format. Please upload a PNG, JPG, JPEG or WEBP image under 5 MB.'
+      setScreenshotError(errorMsg)
+      alert(errorMsg)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      setScreenshotError('Payment screenshot must be less than 5 MB.')
+      const errorMsg = '⚠️ File size exceeds 5 MB. Please upload a payment screenshot less than 5 MB.'
+      setScreenshotError(errorMsg)
+      alert('File size exceeds 5 MB. Please upload a payment screenshot less than 5 MB.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
     const reader = new FileReader()
@@ -140,7 +146,11 @@ export default function Register() {
       setValue('paymentScreenshotData', base64, { shouldValidate: true })
       setValue('paymentScreenshotName', file.name)
     }
-    reader.onerror = () => setScreenshotError('Failed to read file. Please try again.')
+    reader.onerror = () => {
+      const errorMsg = 'Failed to read file. Please try again.'
+      setScreenshotError(errorMsg)
+      alert(errorMsg)
+    }
     reader.readAsDataURL(file)
   }
 
@@ -843,8 +853,8 @@ export default function Register() {
                         <div className="font-mono text-[11px] text-brand-muted mt-0.5">
                           GPay · PhonePe · Paytm · BHIM
                         </div>
-                        <div className="font-mono text-[10px] text-brand-orange mt-1">
-                          UPI ID: {EVENT_CONFIG.upiId}
+                        <div className="font-mono text-xs text-brand-orange mt-2 bg-brand-orange/10 border border-brand-orange/30 px-3 py-1.5 rounded-md font-bold tracking-wide">
+                          QR Name : {EVENT_CONFIG.paymentQRName}
                         </div>
                       </div>
                     </div>
@@ -946,10 +956,15 @@ export default function Register() {
                     )}
 
                     {(screenshotError || errors.paymentScreenshotData) && (
-                      <p className="mt-2 text-xs text-red-400 font-mono flex items-center gap-1">
-                        <AlertCircle size={12} />
-                        {screenshotError || errors.paymentScreenshotData?.message}
-                      </p>
+                      <div className="mt-3 p-3.5 bg-red-500/15 border border-red-500/50 rounded-xl text-xs text-red-300 font-mono flex items-start gap-2.5 shadow-[0_0_15px_rgba(239,68,68,0.25)]">
+                        <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-red-200">UPLOAD ERROR</div>
+                          <div className="mt-0.5 text-red-300/90 leading-relaxed">
+                            {screenshotError || errors.paymentScreenshotData?.message}
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
 
