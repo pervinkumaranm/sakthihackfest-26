@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import LoadingScreen from './components/LoadingScreen'
 import Navbar from './components/Navbar'
@@ -11,15 +11,21 @@ import Success from './pages/Success'
 import Rules from './pages/Rules'
 import FAQ from './pages/FAQ'
 import Contact from './pages/Contact'
-import AdminLogin from './pages/admin/AdminLogin'
-import AdminDashboard from './pages/admin/AdminDashboard'
-import ProtectedRoute from './components/ProtectedRoute'
+import ManageRegistrations from './pages/admin/ManageRegistrations'
+
+import LiveTimer from './pages/LiveTimer'
 
 export default function App() {
   const [loading, setLoading] = useState(true)
   const location = useLocation()
 
-  const isAdmin = location.pathname.startsWith('/admin')
+  const isAdmin =
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/manage-registrations')
+
+  const isStageTimer =
+    location.pathname === '/timer' ||
+    location.pathname === '/live-timer'
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 2800)
@@ -31,7 +37,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text relative">
       <ScrollToTop />
-      {!isAdmin && <Navbar />}
+      {!isAdmin && !isStageTimer && <Navbar />}
       <AnimatePresence mode="wait">
         <motion.div
           key={location.pathname}
@@ -49,19 +55,17 @@ export default function App() {
             <Route path="/rules" element={<Rules />} />
             <Route path="/faq" element={<FAQ />} />
             <Route path="/contact" element={<Contact />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
+            {/* Live Synchronized Stage Timer */}
+            <Route path="/live-timer" element={<LiveTimer />} />
+            <Route path="/timer" element={<LiveTimer />} />
+            {/* Private Admin Route */}
+            <Route path="/manage-registrations" element={<ManageRegistrations />} />
+            <Route path="/admin" element={<Navigate to="/manage-registrations" replace />} />
+            <Route path="/admin/login" element={<Navigate to="/manage-registrations" replace />} />
           </Routes>
         </motion.div>
       </AnimatePresence>
-      {!isAdmin && <Footer />}
+      {!isAdmin && !isStageTimer && <Footer />}
     </div>
   )
 }

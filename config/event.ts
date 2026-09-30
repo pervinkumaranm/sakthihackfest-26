@@ -154,12 +154,12 @@ export const EVENT_CONFIG: EventConfig = {
 
   // TODO: OFFICIAL EVENT DATA - Official Prize values as determined by organizers
   prizePool: {
-    totalDisplay: "TBA", // TODO: OFFICIAL EVENT DATA
+    totalDisplay: "50000", // TODO: OFFICIAL EVENT DATA
     prizes: [
       {
         rank: "01",
         title: "1ST PRIZE",
-        amount: "TBA", // TODO: OFFICIAL EVENT DATA
+        amount: "25000", // TODO: OFFICIAL EVENT DATA
         perks: [
           "Cash Prize ",
           "Exclusive SHF'26 Winner Certificates",
@@ -169,7 +169,7 @@ export const EVENT_CONFIG: EventConfig = {
       {
         rank: "02",
         title: "2ND PRIZE",
-        amount: "TBA", // TODO: OFFICIAL EVENT DATA
+        amount: "15000", // TODO: OFFICIAL EVENT DATA
         perks: [
           "Cash Prize ",
           "Exclusive SHF'26 Certificates",
@@ -178,7 +178,7 @@ export const EVENT_CONFIG: EventConfig = {
       {
         rank: "03",
         title: "3RD PRIZE",
-        amount: "TBA", // TODO: OFFICIAL EVENT DATA
+        amount: "10000", // TODO: OFFICIAL EVENT DATA
         perks: [
           "Cash Prize ",
           "Exclusive SHF'26 Certificates",
@@ -189,7 +189,7 @@ export const EVENT_CONFIG: EventConfig = {
 
   stats: [
     { label: "HOURS OF CODE", value: "24", suffix: "HRS" },
-    { label: "PRIZE POOL", value: "TBA", suffix: "" }, // TODO: OFFICIAL EVENT DATA
+    { label: "PRIZE POOL", value: "50000", suffix: "" }, // TODO: OFFICIAL EVENT DATA
     { label: "TEAMS SELECTED", sublabel: "(FIRST COME FIRST SERVE)", value: "40", suffix: "TEAMS" },
     { label: "INNOVATION DOMAINS", value: "05", suffix: "DOMAINS" },
   ],
@@ -317,7 +317,7 @@ export const EVENT_CONFIG: EventConfig = {
       id: "t7",
       stage: "WINNERS & PRIZE CEREMONY",
       date: "OCT 11, 2026",
-      time: "10:30 PM IST",
+      time: "10:30 AM IST",
       description: "Announcement of 1st, 2nd, 3rd prizes, Certificates, and closing address.",
       status: "upcoming"
     }

@@ -36,6 +36,7 @@ export interface StoredRegistration {
   leaderWhatsapp: string
   leaderEmail: string
   college?: string
+  selectedTheme?: string
   selectedThemeName?: string
   selectedThemeId?: string
 
@@ -67,6 +68,7 @@ export interface AdminStats {
   paymentPending: number
   verifiedCount: number
   rejectedCount: number
+  accommodationCount?: number
   emailSentCount: number
   emailFailedCount: number
   dailyTrends: { date: string; count: number }[]

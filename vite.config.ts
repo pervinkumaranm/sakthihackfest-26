@@ -14,7 +14,11 @@ export default defineConfig(({ mode }) => {
         name: 'local-vercel-api-dev-server',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if (req.url === '/api/register' && req.method === 'POST') {
+            const isRegister = req.url === '/api/register' && req.method === 'POST'
+            const isAdmin = req.url === '/api/admin' && req.method === 'POST'
+            const isTimer = req.url === '/api/timer' || req.url?.startsWith('/api/timer')
+
+            if (isRegister || isAdmin || isTimer) {
               // Reload environment variables from .env on every request
               const currentEnv = loadEnv(mode, process.cwd(), '')
               Object.assign(process.env, currentEnv)
@@ -25,14 +29,23 @@ export default defineConfig(({ mode }) => {
               })
               req.on('end', async () => {
                 try {
-                  const body = JSON.parse(bodyStr)
+                  const body = bodyStr ? JSON.parse(bodyStr) : {}
+                  const targetModule = isRegister
+                    ? '/api/register.ts'
+                    : isAdmin
+                    ? '/api/admin.ts'
+                    : '/api/timer.ts'
                   
                   // Dynamically load the TypeScript API function using Vite's SSR runtime
-                  const apiModule = await server.ssrLoadModule('/api/register.ts')
+                  const apiModule = await server.ssrLoadModule(targetModule)
                   const handler = apiModule.default
 
                   const nodeRes = {
                     statusCode: 200,
+                    setHeader(key: string, val: string) {
+                      res.setHeader(key, val)
+                      return this
+                    },
                     status(code: number) {
                       res.statusCode = code
                       return this
@@ -41,23 +54,28 @@ export default defineConfig(({ mode }) => {
                       res.setHeader('Content-Type', 'application/json')
                       res.end(JSON.stringify(data))
                     },
+                    end(data?: any) {
+                      res.end(data)
+                    },
                   }
 
                   const nodeReq = {
                     method: 'POST',
+                    headers: req.headers,
                     body: body,
                   }
 
                   await handler(nodeReq, nodeRes)
                 } catch (err: any) {
-                  console.error('[Local Dev /api/register error]:', err)
+                  const ep = isRegister ? '/api/register' : '/api/admin'
+                  console.error(`[Local Dev ${ep} error]:`, err)
                   res.setHeader('Content-Type', 'application/json')
                   res.statusCode = 500
                   res.end(
                     JSON.stringify({
                       success: false,
                       stage: 'dev_server',
-                      message: err.message || 'Error processing registration on dev server.',
+                      message: err.message || `Error processing ${ep} on dev server.`,
                     })
                   )
                 }

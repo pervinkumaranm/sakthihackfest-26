@@ -200,26 +200,130 @@ export const apiService = {
     }
   },
 
+  // ── Admin Authentication & Session Management ──────────────────────────────
+
+  async adminLogin(username: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> {
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username, password }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success && data.token) {
+        sessionStorage.setItem('shf26_admin_token', data.token)
+        sessionStorage.setItem('shf26_admin_user', data.user?.username || username)
+        return { success: true, data: { token: data.token, user: data.user } }
+      }
+      return { success: false, error: data.error || 'Invalid administrator credentials.' }
+    } catch (err: any) {
+      console.error('Admin login error:', err)
+      return { success: false, error: 'Authentication failed. Please check network connection.' }
+    }
+  },
+
+  adminLogout() {
+    sessionStorage.removeItem('shf26_admin_token')
+    sessionStorage.removeItem('shf26_admin_user')
+  },
+
+  isAdminAuthenticated(): boolean {
+    return Boolean(sessionStorage.getItem('shf26_admin_token'))
+  },
+
+  getAdminUser(): string | null {
+    return sessionStorage.getItem('shf26_admin_user')
+  },
+
+  getAdminToken(): string | null {
+    return sessionStorage.getItem('shf26_admin_token')
+  },
+
   /**
    * Resend Confirmation Email (Admin)
    */
   async resendConfirmationEmail(registrationId: string): Promise<ApiResponse> {
-    const list = getLocalRegistrations()
-    const idx = list.findIndex(r => r.registrationId === registrationId)
-    if (idx !== -1) {
-      list[idx].emailStatus = 'SENT'
-      list[idx].emailSentAt = new Date().toISOString()
-      saveLocalRegistrations(list)
-      return { success: true, message: `Email marked sent for ${registrationId}` }
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ action: 'resend_email', registrationId }),
+      })
+      const data = await res.json()
+      return data
+    } catch {
+      return { success: false, error: 'Network error occurred while resending email.' }
     }
-    return { success: false, error: 'Registration not found' }
   },
 
   /**
-   * Fetch all registrations (Admin)
+   * Fetch all registrations from real Google Sheet (Admin)
    */
-  async getRegistrations(): Promise<StoredRegistration[]> {
-    return getLocalRegistrations()
+  async getRegistrations(): Promise<{ registrations: StoredRegistration[]; stats?: AdminStats; error?: string }> {
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ action: 'get_registrations' }),
+      })
+      const result = await res.json()
+      if (res.ok && result.success) {
+        return {
+          registrations: result.data || [],
+          stats: result.stats,
+        }
+      }
+      return {
+        registrations: [],
+        error: result.error || 'Unable to load registration data. Please try again.',
+      }
+    } catch (err) {
+      console.error('Failed to fetch registrations from /api/admin:', err)
+      return {
+        registrations: [],
+        error: 'Unable to load registration data. Please try again.',
+      }
+    }
+  },
+
+  /**
+   * Update Existing Registration Details (Admin)
+   */
+  async updateRegistration(
+    registrationId: string,
+    updates: Partial<StoredRegistration>
+  ): Promise<ApiResponse<StoredRegistration>> {
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({
+          action: 'update_registration',
+          registrationId,
+          updates,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        return { success: true, data: data.data, message: data.message }
+      }
+      return { success: false, error: data.error || 'Unable to update this registration. Please try again.' }
+    } catch (err) {
+      console.error('Update registration error:', err)
+      return { success: false, error: 'Unable to update this registration. Please try again.' }
+    }
   },
 
   /**
@@ -230,24 +334,69 @@ export const apiService = {
     paymentStatus: 'VERIFIED' | 'PENDING' | 'REJECTED',
     notes?: string
   ): Promise<ApiResponse<StoredRegistration>> {
-    const list = getLocalRegistrations()
-    const idx = list.findIndex(r => r.registrationId === registrationId)
-    if (idx === -1) return { success: false, error: 'Registration not found' }
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({
+          action: 'verify_payment',
+          registrationId,
+          paymentStatus,
+          rejectionReason: notes,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        return { success: true, data: data.data, message: data.message }
+      }
+      return { success: false, error: data.error || 'Unable to update payment status. Please try again.' }
+    } catch (err) {
+      console.error('Payment status error:', err)
+      return { success: false, error: 'Unable to update payment status. Please try again.' }
+    }
+  },
 
-    list[idx].paymentStatus = paymentStatus
-    list[idx].registrationStatus =
-      paymentStatus === 'VERIFIED' ? 'CONFIRMED' : paymentStatus === 'REJECTED' ? 'REJECTED' : 'PENDING'
-    if (notes !== undefined) list[idx].verificationNotes = notes
-
-    saveLocalRegistrations(list)
-    return { success: true, data: list[idx] }
+  /**
+   * Delete Registration from real Google Sheet (Admin)
+   */
+  async deleteRegistration(registrationId: string): Promise<ApiResponse> {
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({
+          action: 'delete_registration',
+          registrationId,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        return { success: true, message: data.message }
+      }
+      return { success: false, error: data.error || 'Unable to delete this registration. Please try again.' }
+    } catch (err) {
+      console.error('Delete registration error:', err)
+      return { success: false, error: 'Unable to delete this registration. Please try again.' }
+    }
   },
 
   /**
    * Calculate Admin Dashboard Statistics
    */
   async getAdminStats(): Promise<AdminStats> {
-    const list = await this.getRegistrations()
+    const res = await this.getRegistrations()
+    if (res.stats) {
+      return res.stats
+    }
+    const list = res.registrations
 
     const totalRegistrations = list.length
     const totalTeams = list.length
@@ -288,7 +437,7 @@ export const apiService = {
   },
 
   /**
-   * Export Registrations to Excel Spreadsheet
+   * Export Registrations to Excel or CSV Spreadsheet
    */
   exportToSpreadsheet(registrations: StoredRegistration[], format: 'xlsx' | 'csv' = 'xlsx') {
     const flatData = registrations.map(r => ({
@@ -298,7 +447,7 @@ export const apiService = {
       'Team Size': r.teamSize,
       'Accommodation Required': r.accommodationRequired || 'No',
       'Selected Domain': r.selectedDomain || '',
-      'Selected Theme': r.selectedThemeName || 'General Track',
+      'Selected Theme': r.selectedThemeName || r.selectedTheme || 'Open Innovation',
       'Team Leader Name': r.leaderName,
       'Leader College Name': r.leaderCollege || '',
       'Team Leader Department': r.leaderDepartment,
@@ -338,7 +487,21 @@ export const apiService = {
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Registrations')
 
-    const filename = `SAKTHI_HACKFEST_2K26_REGISTRATIONS_${new Date().toISOString().split('T')[0]}.${format}`
-    XLSX.writeFile(workbook, filename)
+    const dateStr = new Date().toISOString().split('T')[0]
+    const filename = `SAKTHI_HACKFEST_2K26_REGISTRATIONS_${dateStr}.${format}`
+
+    if (format === 'csv') {
+      const csvOutput = XLSX.utils.sheet_to_csv(worksheet)
+      const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } else {
+      XLSX.writeFile(workbook, filename)
+    }
   },
 }

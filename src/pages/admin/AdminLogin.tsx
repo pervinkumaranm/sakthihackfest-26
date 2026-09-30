@@ -1,129 +1,192 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle, Loader2, ShieldCheck, Lock } from 'lucide-react'
+import { apiService } from '../../services/api'
 
-// Admin credentials are validated on the backend in production.
-// This demo uses hashed comparison so credentials are NOT in plain source.
-// In production, replace with a proper backend auth endpoint.
-const ADMIN_HASH = btoa('shf26:admin2026') // Base64 encoded — swap with secure backend call
+interface AdminLoginProps {
+  onLoginSuccess?: () => void
+}
 
-export default function AdminLogin() {
+export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const navigate = useNavigate()
+  const location = useLocation()
+
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Enforce noindex metadata on Admin Login page
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="robots"]')
+    if (!meta) {
+      meta = document.createElement('meta')
+      meta.setAttribute('name', 'robots')
+      document.head.appendChild(meta)
+    }
+    meta.setAttribute('content', 'noindex, nofollow')
+
+    return () => {
+      meta?.remove()
+    }
+  }, [])
+
+  // Check if redirected due to expired session
+  useEffect(() => {
+    if (location.state && (location.state as any).sessionExpired) {
+      setError('Your admin session has expired. Please sign in again.')
+    }
+  }, [location.state])
+
+  // If already authenticated, redirect straight to dashboard
+  useEffect(() => {
+    if (apiService.isAdminAuthenticated()) {
+      if (onLoginSuccess) {
+        onLoginSuccess()
+      } else {
+        navigate('/manage-registrations', { replace: true })
+      }
+    }
+  }, [navigate, onLoginSuccess])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    // Simulate network delay
-    await new Promise(res => setTimeout(res, 600))
+    const result = await apiService.adminLogin(username.trim(), password.trim())
 
-    const attempt = btoa(`${username}:${password}`)
-    if (attempt === ADMIN_HASH) {
-      sessionStorage.setItem('shf26_admin_auth', 'true')
-      sessionStorage.setItem('shf26_admin_user', username)
-      navigate('/admin')
+    if (result.success) {
+      if (onLoginSuccess) {
+        onLoginSuccess()
+      } else {
+        navigate('/manage-registrations', { replace: true })
+      }
     } else {
-      setError('Invalid credentials. Contact the event technical lead for admin access.')
+      setError(result.error || 'Invalid administrator credentials.')
     }
     setLoading(false)
   }
 
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
-      <div className="bg-cyber-grid-dense fixed inset-0 opacity-50 pointer-events-none" />
+    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4 py-12 selection:bg-brand-primary selection:text-white">
+      <div className="bg-cyber-grid-dense fixed inset-0 opacity-40 pointer-events-none" />
 
       <motion.div
-        initial={{ opacity: 0, y: 30 }}
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
         className="relative z-10 w-full max-w-md"
       >
-        {/* Logo */}
-        <div className="text-center mb-10">
-          <svg viewBox="0 0 32 32" fill="none" className="w-12 h-12 mx-auto mb-4">
-            <rect width="32" height="32" rx="6" fill="#0D0D0F" stroke="#FF3B30" strokeWidth="1"/>
-            <polygon points="5,26 16,6 27,26" fill="none" stroke="#FF3B30" strokeWidth="1.5"/>
-            <circle cx="16" cy="18" r="4" fill="#FF7A00"/>
-          </svg>
-          <div className="font-display font-black text-xl tracking-widest text-white">
-            SAKTHI <span className="text-brand-primary">HACKFEST</span> 2K26
+        {/* Header Branding */}
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-brand-card border border-brand-border flex items-center justify-center shadow-lg shadow-black/50">
+            <Lock className="w-7 h-7 text-brand-primary" />
           </div>
-          <div className="font-mono text-xs text-brand-muted mt-1 tracking-widest">ADMIN PORTAL</div>
+          <div className="font-display font-black text-2xl tracking-wider text-white">
+            SAKTHI <span className="text-brand-primary">HACKFEST</span> '26
+          </div>
+          <div className="inline-flex items-center gap-1.5 font-mono text-[11px] text-brand-muted mt-1.5 tracking-widest uppercase bg-brand-card/80 px-3 py-1 rounded-full border border-brand-border">
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-orange" />
+            ADMINISTRATION CONSOLE
+          </div>
         </div>
 
-        <form onSubmit={handleLogin} className="bg-brand-surface border border-brand-border p-8 space-y-5">
-          <div className="mb-2">
-            <div className="font-mono text-xs text-brand-primary tracking-widest mb-1">AUTHENTICATION REQUIRED</div>
-            <div className="h-px bg-brand-border" />
-          </div>
-
-          <div>
-            <label className="block font-mono text-xs tracking-widest text-brand-muted mb-2">USERNAME</label>
-            <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="Admin username"
-              required
-              autoComplete="username"
-              className="w-full bg-brand-card border border-brand-border text-white text-sm px-4 py-3 focus:outline-none focus:border-brand-primary transition-colors font-mono placeholder-brand-mutedDark"
-            />
-          </div>
-
-          <div>
-            <label className="block font-mono text-xs tracking-widest text-brand-muted mb-2">PASSWORD</label>
-            <div className="relative">
-              <input
-                type={showPass ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Admin password"
-                required
-                autoComplete="current-password"
-                className="w-full bg-brand-card border border-brand-border text-white text-sm px-4 py-3 pr-12 focus:outline-none focus:border-brand-primary transition-colors font-mono placeholder-brand-mutedDark"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass(!showPass)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-white transition-colors"
-                aria-label={showPass ? 'Hide password' : 'Show password'}
-              >
-                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+        {/* Login Form Container */}
+        <div className="bg-brand-surface/95 border border-brand-border rounded-2xl p-6 sm:p-8 shadow-2xl backdrop-blur-md">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <div className="font-mono text-[11px] text-brand-primary font-semibold tracking-widest uppercase mb-1">
+                SECURE ACCESS REQUIRED
+              </div>
+              <p className="text-xs text-brand-muted">
+                Authorized event coordinators and technical administrators only.
+              </p>
+              <div className="h-px bg-brand-border mt-3" />
             </div>
-          </div>
 
-          {error && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-start gap-3 p-3 border border-red-500/40 bg-red-500/10 text-red-400 text-xs"
+            {/* Username / Email */}
+            <div>
+              <label className="block font-mono text-xs tracking-wider text-brand-muted mb-2 font-medium">
+                ADMIN USERNAME / EMAIL
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="Enter admin username"
+                required
+                autoComplete="username"
+                disabled={loading}
+                className="w-full bg-brand-card border border-brand-border rounded-xl text-white text-sm px-4 py-3 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition-all font-mono placeholder-brand-mutedDark disabled:opacity-60"
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block font-mono text-xs tracking-wider text-brand-muted mb-2 font-medium">
+                SECURE PASSWORD
+              </label>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter administrator password"
+                  required
+                  autoComplete="current-password"
+                  disabled={loading}
+                  className="w-full bg-brand-card border border-brand-border rounded-xl text-white text-sm px-4 py-3 pr-12 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition-all font-mono placeholder-brand-mutedDark disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  disabled={loading}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-white transition-colors"
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                >
+                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-start gap-2.5 p-3.5 rounded-xl border border-red-500/40 bg-red-500/10 text-red-400 text-xs leading-relaxed"
+              >
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </motion.div>
+            )}
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-brand-primary to-brand-orange text-white font-display font-bold tracking-widest py-3.5 rounded-xl hover:shadow-glow-red transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
-              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-              {error}
-            </motion.div>
-          )}
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  AUTHENTICATING...
+                </>
+              ) : (
+                'ENTER ADMIN CONSOLE'
+              )}
+            </button>
+          </form>
+        </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-primary text-white font-display font-bold tracking-widest py-3 hover:shadow-glow-red transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? <><Loader2 size={16} className="animate-spin" /> AUTHENTICATING...</> : 'ACCESS ADMIN PANEL'}
-          </button>
-
-          <div className="text-center">
-            <p className="font-mono text-xs text-brand-mutedDark">
-              Demo: <span className="text-brand-muted">shf26 / admin2026</span>
-            </p>
-          </div>
-        </form>
+        <div className="text-center mt-6">
+          <p className="font-mono text-[11px] text-brand-mutedDark">
+            Sree Sakthi Engineering College · Karamadai, Coimbatore
+          </p>
+        </div>
       </motion.div>
     </div>
   )
