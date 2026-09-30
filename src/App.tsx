@@ -14,6 +14,7 @@ import Contact from './pages/Contact'
 import ManageRegistrations from './pages/admin/ManageRegistrations'
 
 import LiveTimer from './pages/LiveTimer'
+import WinnerLeaderboard from './pages/WinnerLeaderboard'
 
 export default function App() {
   const [loading, setLoading] = useState(true)
@@ -23,9 +24,11 @@ export default function App() {
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/manage-registrations')
 
-  const isStageTimer =
+  const isStageScreen =
     location.pathname === '/timer' ||
-    location.pathname === '/live-timer'
+    location.pathname === '/live-timer' ||
+    location.pathname === '/leaderboard' ||
+    location.pathname === '/winners'
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 2800)
@@ -37,7 +40,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text relative">
       <ScrollToTop />
-      {!isAdmin && !isStageTimer && <Navbar />}
+      {!isAdmin && !isStageScreen && <Navbar />}
       <AnimatePresence mode="wait">
         <motion.div
           key={location.pathname}
@@ -58,6 +61,9 @@ export default function App() {
             {/* Live Synchronized Stage Timer */}
             <Route path="/live-timer" element={<LiveTimer />} />
             <Route path="/timer" element={<LiveTimer />} />
+            {/* Live Grand Finale Winner Reveal Screen */}
+            <Route path="/leaderboard" element={<WinnerLeaderboard />} />
+            <Route path="/winners" element={<WinnerLeaderboard />} />
             {/* Private Admin Route */}
             <Route path="/manage-registrations" element={<ManageRegistrations />} />
             <Route path="/admin" element={<Navigate to="/manage-registrations" replace />} />
@@ -65,7 +71,7 @@ export default function App() {
           </Routes>
         </motion.div>
       </AnimatePresence>
-      {!isAdmin && !isStageTimer && <Footer />}
+      {!isAdmin && !isStageScreen && <Footer />}
     </div>
   )
 }

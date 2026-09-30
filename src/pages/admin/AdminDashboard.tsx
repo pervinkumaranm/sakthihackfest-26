@@ -7,10 +7,11 @@ import {
   Mail, Trash2, Edit3, Filter, ChevronDown, Image as ImageIcon,
   Building, Phone, Calendar, UserCheck, ShieldAlert, FileText, CheckSquare,
   Trophy, Medal, Award, Timer, Flame, GraduationCap, Star, Sparkles, TrendingUp, BarChart3,
-  Play, Pause, Square, RotateCcw, Megaphone, MonitorPlay, Plus, Bell, Volume2, Tv, Radio
+  Play, Pause, Square, RotateCcw, Megaphone, MonitorPlay, Plus, Bell, Volume2, Tv, Radio, Crown
 } from 'lucide-react'
 import { apiService } from '../../services/api'
 import { timerService, type HackathonTimerState } from '../../services/timerService'
+import { winnerService, type WinnerAnnouncementState, type WinnerTeamRecord } from '../../services/winnerService'
 import type { StoredRegistration, AdminStats, PaymentStatus, RegistrationStatus } from '../../types'
 import { HACKATHON_DOMAINS } from '../../../config/registrationSchema'
 import { eventConfig } from '../../../config/eventConfig'
@@ -20,7 +21,7 @@ interface AdminDashboardProps {
 }
 
 type TabType = 'dashboard' | 'registrations' | 'payments' | 'accommodation' | 'leaderboard' | 'timer'
-type LeaderboardView = 'teams' | 'colleges' | 'domains'
+type LeaderboardView = 'announcement' | 'teams' | 'colleges' | 'domains'
 
 interface TeamEvaluation {
   score: number
@@ -227,6 +228,128 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     timerService.setAnnouncement('')
     setAnnouncementInput('')
     setActionFeedback({ type: 'success', message: 'Stage announcement cleared.' })
+  }
+
+  // ── WINNER ANNOUNCEMENT CONTROLLER STATE ─────────────────────────────────
+  const [winnerState, setWinnerState] = useState<WinnerAnnouncementState>(() => winnerService.getState())
+  const [confirmResetWinnerModal, setConfirmResetWinnerModal] = useState(false)
+
+  // Synchronize winnerService
+  useEffect(() => {
+    const unsub = winnerService.subscribe((s) => {
+      setWinnerState(s)
+    })
+    return unsub
+  }, [])
+
+  // Helper to convert registration to WinnerTeamRecord
+  const regToWinner = (reg: StoredRegistration): WinnerTeamRecord => ({
+    registrationId: reg.registrationId,
+    teamName: reg.teamName,
+    teamLeader: reg.leaderName,
+    college: reg.leaderCollege || reg.college || 'Sree Sakthi Engineering College',
+    domain: reg.selectedDomain || reg.selectedThemeName || 'General Track',
+  })
+
+  // Select Winner handlers
+  const handleSelectFirstWinner = (regId: string) => {
+    const target = registrations.find(r => r.registrationId === regId)
+    const winner = target ? regToWinner(target) : null
+    winnerService.setWinners(winner, winnerState.secondPlace, winnerState.thirdPlace)
+    setActionFeedback({ type: 'success', message: `1st Prize Champion assigned to ${winner?.teamName || 'None'}.` })
+  }
+
+  const handleSelectSecondWinner = (regId: string) => {
+    const target = registrations.find(r => r.registrationId === regId)
+    const winner = target ? regToWinner(target) : null
+    winnerService.setWinners(winnerState.firstPlace, winner, winnerState.thirdPlace)
+    setActionFeedback({ type: 'success', message: `2nd Prize Winner assigned to ${winner?.teamName || 'None'}.` })
+  }
+
+  const handleSelectThirdWinner = (regId: string) => {
+    const target = registrations.find(r => r.registrationId === regId)
+    const winner = target ? regToWinner(target) : null
+    winnerService.setWinners(winnerState.firstPlace, winnerState.secondPlace, winner)
+    setActionFeedback({ type: 'success', message: `3rd Prize Winner assigned to ${winner?.teamName || 'None'}.` })
+  }
+
+  // Auto-fill top 3 winners from ranked list
+  const handleAutoAssignTop3 = () => {
+    if (rankedTeams.length === 0) {
+      setActionFeedback({ type: 'error', message: 'No registered teams available to auto-assign.' })
+      return
+    }
+    const first = rankedTeams[0] ? regToWinner(rankedTeams[0]) : null
+    const second = rankedTeams[1] ? regToWinner(rankedTeams[1]) : null
+    const third = rankedTeams[2] ? regToWinner(rankedTeams[2]) : null
+
+    winnerService.setWinners(first, second, third)
+    setActionFeedback({ type: 'success', message: 'Auto-assigned Top 3 ranked teams to 1st, 2nd, and 3rd Prizes.' })
+  }
+
+  // Step 1: Announce 3rd Prize
+  const handleAnnounceThird = () => {
+    if (!winnerState.thirdPlace) {
+      setActionFeedback({ type: 'error', message: 'Please select a 3rd Prize Winner first.' })
+      return
+    }
+    winnerService.announceThird()
+    setActionFeedback({ type: 'success', message: `3rd Prize revealed on public screen: ${winnerState.thirdPlace.teamName}!` })
+  }
+
+  // Step 2: Complete 3rd Prize Distribution
+  const handleCompleteThirdDistribution = () => {
+    winnerService.completeThirdDistribution()
+    setActionFeedback({ type: 'success', message: '3rd Prize distribution marked complete. Ready for 2nd Prize.' })
+  }
+
+  // Step 3: Announce 2nd Prize
+  const handleAnnounceSecond = () => {
+    if (!winnerState.secondPlace) {
+      setActionFeedback({ type: 'error', message: 'Please select a 2nd Prize Winner first.' })
+      return
+    }
+    winnerService.announceSecond()
+    setActionFeedback({ type: 'success', message: `2nd Prize revealed on public screen: ${winnerState.secondPlace.teamName}!` })
+  }
+
+  // Step 4: Complete 2nd Prize Distribution
+  const handleCompleteSecondDistribution = () => {
+    winnerService.completeSecondDistribution()
+    setActionFeedback({ type: 'success', message: '2nd Prize distribution marked complete. Ready for Grand Finale Countdown!' })
+  }
+
+  // Step 5: Start 5-Second Countdown
+  const handleStartCountdown = () => {
+    if (!winnerState.firstPlace) {
+      setActionFeedback({ type: 'error', message: 'Please select a 1st Prize Champion before countdown.' })
+      return
+    }
+    winnerService.startCountdown()
+    setActionFeedback({ type: 'success', message: 'Dramatic 5-Second Countdown started on all screens!' })
+  }
+
+  // Step 6: Announce 1st Prize
+  const handleAnnounceFirst = () => {
+    if (!winnerState.firstPlace) {
+      setActionFeedback({ type: 'error', message: 'Please select a 1st Prize Champion.' })
+      return
+    }
+    winnerService.announceFirst()
+    setActionFeedback({ type: 'success', message: `1st Prize revealed on public screen: ${winnerState.firstPlace.teamName}!` })
+  }
+
+  // Step 7: Complete Announcement & Show Full Podium
+  const handleCompleteAnnouncement = () => {
+    winnerService.completeAnnouncement()
+    setActionFeedback({ type: 'success', message: 'Winner announcement completed. Full 3-podium layout active on public screen.' })
+  }
+
+  // Reset Announcement
+  const handleResetAnnouncement = () => {
+    winnerService.resetAnnouncement()
+    setConfirmResetWinnerModal(false)
+    setActionFeedback({ type: 'success', message: 'Winner announcement sequence reset to standby.' })
   }
 
   // Persist evaluations
@@ -881,7 +1004,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </div>
 
               {/* Sub-view switcher */}
-              <div className="flex items-center gap-1.5 bg-brand-card p-1 rounded-xl border border-brand-border">
+              <div className="flex items-center gap-1.5 bg-brand-card p-1 rounded-xl border border-brand-border flex-wrap">
+                <button
+                  onClick={() => setLeaderboardSubView('announcement')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 ${
+                    leaderboardSubView === 'announcement' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-bold shadow-lg' : 'text-yellow-400 hover:text-white'
+                  }`}
+                >
+                  <Crown size={13} />
+                  WINNER REVEAL
+                </button>
                 <button
                   onClick={() => setLeaderboardSubView('teams')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
@@ -908,6 +1040,336 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </button>
               </div>
             </div>
+
+            {/* SUB-VIEW 0: WINNER ANNOUNCEMENT CONTROLLER */}
+            {leaderboardSubView === 'announcement' && (
+              <div className="space-y-6">
+                {/* Controller Header & Public Link */}
+                <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Crown className="w-5 h-5 text-yellow-400" />
+                      <h3 className="font-display font-black text-lg sm:text-xl text-white tracking-wide">
+                        WINNER ANNOUNCEMENT CONTROLLER
+                      </h3>
+                    </div>
+                    <p className="text-xs text-brand-muted font-mono leading-relaxed">
+                      Controls the live sequential reveal on the public screen (<code className="text-yellow-400">/leaderboard</code>). Sequence must happen in strict order: 3rd → Prize Distribution → 2nd → Prize Distribution → Countdown → 1st.
+                    </p>
+                  </div>
+
+                  {/* Public Link & Current Stage Badge */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="px-3 py-1.5 rounded-xl bg-brand-card border border-brand-border font-mono text-xs flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${
+                        winnerState.stage === 'COMPLETED' ? 'bg-emerald-400' :
+                        winnerState.stage.includes('FIRST') ? 'bg-yellow-400 animate-pulse' :
+                        winnerState.stage.includes('COUNTDOWN') ? 'bg-red-500 animate-ping' :
+                        winnerState.stage.includes('SECOND') ? 'bg-slate-300 animate-pulse' :
+                        winnerState.stage.includes('THIRD') ? 'bg-amber-500 animate-pulse' :
+                        'bg-brand-muted'
+                      }`} />
+                      <span className="text-brand-muted">STAGE:</span>
+                      <strong className="text-white">
+                        {winnerState.stage === 'NOT_STARTED' ? 'STANDBY (NOT STARTED)' :
+                         winnerState.stage === 'THIRD_ANNOUNCED' ? '3RD PRIZE REVEALED' :
+                         winnerState.stage === 'THIRD_DISTRIBUTION_COMPLETE' ? '3RD PRIZE DISTRIBUTION' :
+                         winnerState.stage === 'SECOND_ANNOUNCED' ? '2ND PRIZE REVEALED' :
+                         winnerState.stage === 'SECOND_DISTRIBUTION_COMPLETE' ? '2ND PRIZE DISTRIBUTION' :
+                         winnerState.stage === 'COUNTDOWN_RUNNING' ? '5S COUNTDOWN RUNNING' :
+                         winnerState.stage === 'FIRST_ANNOUNCED' ? '1ST PRIZE CHAMPIONS REVEALED' :
+                         'ALL WINNERS COMPLETED'}
+                      </strong>
+                    </div>
+
+                    <a
+                      href="/leaderboard"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-mono text-xs font-bold flex items-center gap-2 shadow-lg transition-all"
+                    >
+                      <MonitorPlay size={15} />
+                      OPEN PUBLIC STAGE SCREEN ↗
+                    </a>
+                  </div>
+                </div>
+
+                {/* Selected Winners Configuration (From Real Registration Data Only) */}
+                <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
+                    <div>
+                      <div className="font-mono text-xs text-white font-bold uppercase tracking-wider flex items-center gap-2">
+                        <Trophy size={15} className="text-brand-orange" />
+                        SELECT OFFICIAL WINNERS (FROM ACTUAL REGISTRATION TEAMS)
+                      </div>
+                      <p className="text-[11px] text-brand-muted font-mono mt-0.5">
+                        Winners are linked directly to live Google Sheet records. No fake names allowed.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleAutoAssignTop3}
+                      className="px-3.5 py-1.5 rounded-xl border border-brand-primary/40 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
+                    >
+                      <Sparkles size={13} />
+                      Auto-Assign from Top 3 Ranked
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                    {/* 🥉 3RD PRIZE SELECTION */}
+                    <div className="p-4 rounded-xl bg-brand-card border border-amber-600/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-mono text-xs text-amber-400 font-bold uppercase">
+                          <span>🥉 3RD PRIZE</span>
+                          <span className="text-[10px] text-brand-muted">(₹10,000)</span>
+                        </div>
+                        {winnerState.thirdPlace && (
+                          <span className="text-[10px] font-mono text-green-400 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={winnerState.thirdPlace?.registrationId || ''}
+                        onChange={e => handleSelectThirdWinner(e.target.value)}
+                        className="w-full bg-brand-surface border border-brand-border rounded-lg text-white text-xs px-3 py-2.5 font-mono focus:outline-none focus:border-amber-500 truncate"
+                      >
+                        <option value="">-- Choose 3rd Prize Team --</option>
+                        {registrations.map(r => (
+                          <option key={r.registrationId} value={r.registrationId}>
+                            {r.teamName} ({r.registrationId} - {r.leaderName})
+                          </option>
+                        ))}
+                      </select>
+
+                      {winnerState.thirdPlace ? (
+                        <div className="p-3 rounded-lg bg-black/40 border border-amber-500/20 text-xs font-mono space-y-1">
+                          <div className="font-bold text-white text-sm truncate">{winnerState.thirdPlace.teamName}</div>
+                          <div className="text-[11px] text-brand-muted truncate">Leader: {winnerState.thirdPlace.teamLeader}</div>
+                          <div className="text-[10px] text-amber-400 truncate">{winnerState.thirdPlace.college}</div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-brand-muted font-mono italic">No team selected yet</div>
+                      )}
+                    </div>
+
+                    {/* 🥈 2ND PRIZE SELECTION */}
+                    <div className="p-4 rounded-xl bg-brand-card border border-slate-300/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-mono text-xs text-slate-300 font-bold uppercase">
+                          <span>🥈 2ND PRIZE</span>
+                          <span className="text-[10px] text-brand-muted">(₹15,000)</span>
+                        </div>
+                        {winnerState.secondPlace && (
+                          <span className="text-[10px] font-mono text-green-400 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={winnerState.secondPlace?.registrationId || ''}
+                        onChange={e => handleSelectSecondWinner(e.target.value)}
+                        className="w-full bg-brand-surface border border-brand-border rounded-lg text-white text-xs px-3 py-2.5 font-mono focus:outline-none focus:border-slate-400 truncate"
+                      >
+                        <option value="">-- Choose 2nd Prize Team --</option>
+                        {registrations.map(r => (
+                          <option key={r.registrationId} value={r.registrationId}>
+                            {r.teamName} ({r.registrationId} - {r.leaderName})
+                          </option>
+                        ))}
+                      </select>
+
+                      {winnerState.secondPlace ? (
+                        <div className="p-3 rounded-lg bg-black/40 border border-slate-400/20 text-xs font-mono space-y-1">
+                          <div className="font-bold text-white text-sm truncate">{winnerState.secondPlace.teamName}</div>
+                          <div className="text-[11px] text-brand-muted truncate">Leader: {winnerState.secondPlace.teamLeader}</div>
+                          <div className="text-[10px] text-slate-300 truncate">{winnerState.secondPlace.college}</div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-brand-muted font-mono italic">No team selected yet</div>
+                      )}
+                    </div>
+
+                    {/* 🥇 1ST PRIZE SELECTION */}
+                    <div className="p-4 rounded-xl bg-brand-card border border-yellow-400/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-mono text-xs text-yellow-300 font-bold uppercase">
+                          <span>🥇 1ST PRIZE CHAMPIONS</span>
+                          <span className="text-[10px] text-brand-muted">(₹25,000)</span>
+                        </div>
+                        {winnerState.firstPlace && (
+                          <span className="text-[10px] font-mono text-green-400 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={winnerState.firstPlace?.registrationId || ''}
+                        onChange={e => handleSelectFirstWinner(e.target.value)}
+                        className="w-full bg-brand-surface border border-brand-border rounded-lg text-white text-xs px-3 py-2.5 font-mono focus:outline-none focus:border-yellow-400 truncate"
+                      >
+                        <option value="">-- Choose 1st Prize Champion --</option>
+                        {registrations.map(r => (
+                          <option key={r.registrationId} value={r.registrationId}>
+                            {r.teamName} ({r.registrationId} - {r.leaderName})
+                          </option>
+                        ))}
+                      </select>
+
+                      {winnerState.firstPlace ? (
+                        <div className="p-3 rounded-lg bg-black/40 border border-yellow-400/20 text-xs font-mono space-y-1">
+                          <div className="font-bold text-white text-sm truncate">{winnerState.firstPlace.teamName}</div>
+                          <div className="text-[11px] text-brand-muted truncate">Leader: {winnerState.firstPlace.teamLeader}</div>
+                          <div className="text-[10px] text-yellow-300 truncate">{winnerState.firstPlace.college}</div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-brand-muted font-mono italic">No team selected yet</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sequential Stage Control Buttons */}
+                <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="font-mono text-xs text-brand-primary font-bold uppercase tracking-wider">
+                      LIVE ANNOUNCEMENT STEP-BY-STEP CONTROLS
+                    </div>
+                    <div className="font-mono text-[11px] text-brand-muted">
+                      Order: 3rd → Distribution → 2nd → Distribution → Countdown → 1st
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {/* BUTTON 1: ANNOUNCE 3RD PRIZE */}
+                    <button
+                      onClick={handleAnnounceThird}
+                      disabled={winnerState.stage !== 'NOT_STARTED' || !winnerState.thirdPlace}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'NOT_STARTED' && winnerState.thirdPlace
+                          ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white shadow-lg active:scale-95'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="text-2xl">🥉</span>
+                      <span>1. ANNOUNCE 3RD PRIZE</span>
+                      <span className="text-[10px] font-normal text-amber-200">Reveals 3rd Winner Only</span>
+                    </button>
+
+                    {/* BUTTON 2: 3RD PRIZE DISTRIBUTION COMPLETE */}
+                    <button
+                      onClick={handleCompleteThirdDistribution}
+                      disabled={winnerState.stage !== 'THIRD_ANNOUNCED'}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'THIRD_ANNOUNCED'
+                          ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg active:scale-95 animate-pulse'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <CheckCircle size={24} className="text-amber-300" />
+                      <span>2. PRIZE DISTRIBUTION COMPLETE</span>
+                      <span className="text-[10px] font-normal text-amber-200">Allows moving to 2nd</span>
+                    </button>
+
+                    {/* BUTTON 3: ANNOUNCE 2ND PRIZE */}
+                    <button
+                      onClick={handleAnnounceSecond}
+                      disabled={winnerState.stage !== 'THIRD_DISTRIBUTION_COMPLETE' || !winnerState.secondPlace}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'THIRD_DISTRIBUTION_COMPLETE' && winnerState.secondPlace
+                          ? 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-400 hover:to-slate-500 text-white shadow-lg active:scale-95'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="text-2xl">🥈</span>
+                      <span>3. ANNOUNCE 2ND PRIZE</span>
+                      <span className="text-[10px] font-normal text-slate-200">Reveals 2nd Winner Only</span>
+                    </button>
+
+                    {/* BUTTON 4: 2ND PRIZE DISTRIBUTION COMPLETE */}
+                    <button
+                      onClick={handleCompleteSecondDistribution}
+                      disabled={winnerState.stage !== 'SECOND_ANNOUNCED'}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'SECOND_ANNOUNCED'
+                          ? 'bg-slate-600 hover:bg-slate-500 text-white shadow-lg active:scale-95 animate-pulse'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <CheckCircle size={24} className="text-slate-300" />
+                      <span>4. PRIZE DISTRIBUTION COMPLETE</span>
+                      <span className="text-[10px] font-normal text-slate-200">Enables 5s Countdown</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-2 border-t border-brand-border/60">
+                    {/* BUTTON 5: START 5 SECOND COUNTDOWN */}
+                    <button
+                      onClick={handleStartCountdown}
+                      disabled={winnerState.stage !== 'SECOND_DISTRIBUTION_COMPLETE' || !winnerState.firstPlace}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'SECOND_DISTRIBUTION_COMPLETE' && winnerState.firstPlace
+                          ? 'bg-gradient-to-r from-red-600 to-brand-primary hover:from-red-500 hover:to-brand-primaryLight text-white shadow-glow-red active:scale-95 animate-pulse'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <Clock size={24} className="text-red-300" />
+                      <span>5. START 5 SECOND COUNTDOWN</span>
+                      <span className="text-[10px] font-normal text-red-200">Dramatic 5..4..3..2..1</span>
+                    </button>
+
+                    {/* BUTTON 6: 1ST PRIZE REVEAL (CHAMPIONS) */}
+                    <button
+                      onClick={handleAnnounceFirst}
+                      disabled={winnerState.stage !== 'COUNTDOWN_RUNNING' && winnerState.stage !== 'SECOND_DISTRIBUTION_COMPLETE'}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'COUNTDOWN_RUNNING'
+                          ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-black font-black shadow-lg shadow-yellow-500/30'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <Crown size={24} className="text-yellow-400" />
+                      <span>6. ANNOUNCE 1ST PRIZE</span>
+                      <span className="text-[10px] font-normal text-yellow-900">Grand Finale Reveal</span>
+                    </button>
+
+                    {/* BUTTON 7: COMPLETE & SHOW PODIUM */}
+                    <button
+                      onClick={handleCompleteAnnouncement}
+                      disabled={winnerState.stage !== 'FIRST_ANNOUNCED'}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
+                        winnerState.stage === 'FIRST_ANNOUNCED'
+                          ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg active:scale-95'
+                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <Trophy size={24} className="text-yellow-300" />
+                      <span>7. COMPLETE & SHOW PODIUM</span>
+                      <span className="text-[10px] font-normal text-green-200">Official 3-Winner Stage</span>
+                    </button>
+                  </div>
+
+                  {/* Safety Reset Button */}
+                  <div className="pt-2 border-t border-brand-border/60 flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] font-mono text-brand-muted">
+                      Rehearsal / Test Mode: You can reset the announcement sequence back to standby anytime.
+                    </span>
+
+                    <button
+                      onClick={() => setConfirmResetWinnerModal(true)}
+                      className="px-3.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
+                    >
+                      <RotateCcw size={13} />
+                      Reset Announcement Sequence
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* SUB-VIEW 1: TEAMS LEADERBOARD */}
             {leaderboardSubView === 'teams' && (
@@ -2752,6 +3214,53 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-bold shadow-glow-red transition-all"
                 >
                   YES, CODE FREEZE NOW
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL 7: CONFIRM RESET WINNER ANNOUNCEMENT ─────────────────────── */}
+      <AnimatePresence>
+        {confirmResetWinnerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-brand-surface border-2 border-amber-500/60 rounded-2xl shadow-2xl p-6 space-y-4"
+            >
+              <div className="flex items-center gap-3 text-amber-400">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <RotateCcw size={24} />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-xl text-white">RESET ANNOUNCEMENT?</h3>
+                  <div className="font-mono text-xs text-amber-400 font-bold uppercase tracking-wider">
+                    RETURN TO STANDBY MODE
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-brand-muted font-mono leading-relaxed">
+                This will reset the public winner reveal screen back to <strong className="text-white">STANDBY</strong>. Your selected winners will remain saved, but the step-by-step sequence will start from <strong className="text-amber-400">3rd Prize</strong> again.
+              </p>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmResetWinnerModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-brand-border bg-brand-card text-brand-muted text-xs font-mono font-semibold hover:text-white transition-all"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetAnnouncement}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-mono font-bold shadow-lg transition-all"
+                >
+                  CONFIRM RESET
                 </button>
               </div>
             </motion.div>

@@ -17,8 +17,9 @@ export default defineConfig(({ mode }) => {
             const isRegister = req.url === '/api/register' && req.method === 'POST'
             const isAdmin = req.url === '/api/admin' && req.method === 'POST'
             const isTimer = req.url === '/api/timer' || req.url?.startsWith('/api/timer')
+            const isWinners = req.url === '/api/winners' || req.url?.startsWith('/api/winners')
 
-            if (isRegister || isAdmin || isTimer) {
+            if (isRegister || isAdmin || isTimer || isWinners) {
               // Reload environment variables from .env on every request
               const currentEnv = loadEnv(mode, process.cwd(), '')
               Object.assign(process.env, currentEnv)
@@ -34,7 +35,9 @@ export default defineConfig(({ mode }) => {
                     ? '/api/register.ts'
                     : isAdmin
                     ? '/api/admin.ts'
-                    : '/api/timer.ts'
+                    : isTimer
+                    ? '/api/timer.ts'
+                    : '/api/winners.ts'
                   
                   // Dynamically load the TypeScript API function using Vite's SSR runtime
                   const apiModule = await server.ssrLoadModule(targetModule)
