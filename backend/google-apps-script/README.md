@@ -1,9 +1,44 @@
 # 🚀 SAKTHI HACKFEST 2K26 — Google Sheet, Drive & Email Automation Guide
-### Full From-Scratch Setup Guide (Step-by-Step)
 
 > **Official Sender Email:** `sakthihackfest@gmail.com`  
-> **Target Recipient:** Only the **Team Leader Email** entered during registration  
-> **Storage:** Google Sheets (39 Columns) + Google Drive (`SAKTHI HACKFEST 2K26 / Payment Proofs / <REGISTRATION_ID>`)
+> **Google Sheet ID:** `1F_XlNsLdUXx31w92caKs5jidCeI0jcZIMY_TPPBJefE`  
+> **Drive Payment Proofs Folder ID:** `1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC`  
+> **Active Backend Apps Script Project:** `SAKTHI HACKFEST 2K26 Backend` (Script ID: `1LZjRe9_aA7axqAYIAAtcO7oAMPmthrRyaYBruFaemll-BCK8s4DoYpdH`)  
+> **Max Registration Limit:** Strictly **60 Teams**
+
+---
+
+## 🔍 Which of Your 2 Apps Script Projects is Used?
+
+Looking at your Google Apps Script dashboard (Screenshot):
+1. ❌ **`Untitled project`** (`1oCcH7jYlpWSJWL34EWEYNvfBzfYjjcavtDpkyt087j8Uroirct8nOL7`):  
+   This contains `closeMyForm()` for closing a Google Form at 50 responses. **This is NOT the website backend.**
+2. ✅ **`SAKTHI HACKFEST 2K26 Backend`** (`1LZjRe9_aA7axqAYIAAtcO7oAMPmthrRyaYBruFaemll-BCK8s4DoYpdH`):  
+   **THIS IS THE OFFICIAL BACKEND SCRIPT.** It handles the 60-team atomic lock, Google Sheet writes, Google Drive payment proof uploads, and automated confirmation emails.
+
+---
+
+## ⚡ How to Update & Deploy in 2 Minutes
+
+### 1. Open the Correct Apps Script Project
+Direct URL:  
+👉 **`https://script.google.com/u/0/home/projects/1LZjRe9_aA7axqAYIAAtcO7oAMPmthrRyaYBruFaemll-BCK8s4DoYpdH/edit`**  
+*(Make sure you are logged in as `sakthihackfest@gmail.com`)*
+
+### 2. Copy the Updated Code
+1. Open the file [`backend/google-apps-script/Code.gs`](file:///home/z3r0_byt3/sakthihackfest-26/backend/google-apps-script/Code.gs) in this repository.
+2. Select everything (`Ctrl + A`) and Copy (`Ctrl + C`).
+3. In the Apps Script web editor, inside `Code.gs`, select everything (`Ctrl + A`) and Paste (`Ctrl + V`).
+4. Save by pressing `Ctrl + S`.
+
+### 3. Deploy New Version
+1. Click the blue **Deploy** button at the top-right corner.
+2. Select **Manage deployments**.
+3. Click the **Pencil icon (Edit)** next to the active deployment.
+4. Under **Version**, click the dropdown and choose **New version**.
+5. Click **Deploy**.
+6. Your Active Web App URL:  
+   `https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec`
 
 ---
 
@@ -13,68 +48,18 @@
 Participant Submits Form (React Website)
                   │
                   ▼
-      Google Apps Script Web App
+      Vercel /api/register Proxy
+                  │
+                  ▼
+   Google Apps Script Web App (sakthihackfest@gmail.com)
                   │
   ┌───────────────┼───────────────┐
   ▼               ▼               ▼
-[Google Drive]  [Google Sheet]  [Gmail Automation]
-Saves payment    Appends 39-col   Sends confirmation
-screenshot into  row with         email strictly from
-dedicated        unique ID        sakthihackfest@gmail.com
-subfolder        (SHF26-XXXXXX)   to Team Leader Email
+[Google Drive]  [Google Sheet]  [MailApp / Gmail]
+Saves screenshot Appends row     Sends confirmation email
+in Payment       into            strictly from
+Proofs folder    Registrations   sakthihackfest@gmail.com
 ```
-
----
-
-## ⚠️ Most Important Rule (Read Before Starting!)
-
-Because you want emails to be sent from **`sakthihackfest@gmail.com`**, you **MUST**:
-1. Open Google Chrome.
-2. Log in using **`sakthihackfest@gmail.com`** (We strongly recommend using a **New Chrome Profile** or an **Incognito / Private Window** so other personal Google accounts don't cause permission conflicts).
-3. Create the Google Sheet and deploy the Google Apps Script while logged into this account.
-
----
-
-## 🛠️ Step-by-Step Setup Instructions
-
-### STEP 1 — Create or Open Your Google Sheet
-
-1. Go to [https://sheets.google.com](https://sheets.google.com) logged in as `sakthihackfest@gmail.com`.
-2. Create a new blank spreadsheet or open your existing one.
-3. Rename the sheet at the top left to:  
-   **`SAKTHI_HACKFEST_2K26_REGISTRATIONS`**
-4. Copy the **Spreadsheet ID** from your browser URL bar:
-   ```
-   https://docs.google.com/spreadsheets/d/1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0/edit
-                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                                   THIS IS YOUR SPREADSHEET ID
-   ```
-
----
-
-### STEP 2 — Open Apps Script from Google Sheet
-
-1. In your Google Sheet menu bar, click:  
-   **Extensions** ➔ **Apps Script**
-2. A new tab will open titled *Untitled project*.
-3. Rename the project at the top left to:  
-   **`Sakthi Hackfest 2K26 Backend`**
-
----
-
-### STEP 3 — Copy & Paste the Backend Code
-
-1. In the Apps Script code editor, you will see default code inside `Code.gs`.
-2. Select everything (`Ctrl + A`) and delete it.
-3. Open your local project file:  
-   [`backend/google-apps-script/Code.gs`](file:///d:/HACK/backend/google-apps-script/Code.gs)
-4. Copy the entire file content and paste it into the Apps Script editor.
-5. *(Optional)* Check line 20 in `Code.gs`:
-   ```javascript
-   SPREADSHEET_ID: "YOUR_SPREADSHEET_ID_HERE",
-   ```
-   *(Note: If you opened Apps Script from **Extensions > Apps Script**, it automatically binds to your sheet!)*
-6. Press `Ctrl + S` or click the **Save icon (💾)**.
 
 ---
 

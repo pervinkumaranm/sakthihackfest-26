@@ -14,8 +14,8 @@ export default defineConfig(({ mode }) => {
         name: 'local-vercel-api-dev-server',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            const isRegister = req.url === '/api/register' && req.method === 'POST'
-            const isAdmin = req.url === '/api/admin' && req.method === 'POST'
+            const isRegister = req.url === '/api/register' || req.url?.startsWith('/api/register?') || req.url?.startsWith('/api/register/')
+            const isAdmin = req.url === '/api/admin' || req.url?.startsWith('/api/admin?')
             const isTimer = req.url === '/api/timer' || req.url?.startsWith('/api/timer')
             const isWinners = req.url === '/api/winners' || req.url?.startsWith('/api/winners')
 
@@ -62,9 +62,17 @@ export default defineConfig(({ mode }) => {
                     },
                   }
 
+                  const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`)
+                  const queryObj: Record<string, string> = {}
+                  parsedUrl.searchParams.forEach((v, k) => {
+                    queryObj[k] = v
+                  })
+
                   const nodeReq = {
-                    method: 'POST',
+                    method: req.method || 'GET',
                     headers: req.headers,
+                    url: req.url,
+                    query: queryObj,
                     body: body,
                   }
 

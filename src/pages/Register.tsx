@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, Upload, CheckCircle2, AlertCircle,
   Loader2, ShieldCheck, RefreshCw, Trash2,
   Users, Phone, Mail, FileText, ArrowRight, User,
-  Sparkles, Globe, Palette, Coins
+  Sparkles, Globe, Palette, Coins, Lock, X
 } from 'lucide-react'
 import { EVENT_CONFIG } from '../../config/eventConfig'
 import { registrationFormSchema, RegistrationFormValues, ACADEMIC_YEARS } from '../../config/registrationSchema'
@@ -49,6 +49,10 @@ export default function Register() {
   const [screenshotFileName, setScreenshotFileName] = useState('')
   const [screenshotError, setScreenshotError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [isRegistrationClosed, setIsRegistrationClosed] = useState(false)
+  const [registeredCount, setRegisteredCount] = useState<number | null>(null)
+  const [showClosedModal, setShowClosedModal] = useState(false)
+  const [checkingStatus, setCheckingStatus] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -111,6 +115,33 @@ export default function Register() {
       replace(next)
     }
   }, [selectedTeamSize, replace])
+
+  // Check Registration Limit (Strict 60 Teams Limit)
+  useEffect(() => {
+    let active = true
+    const verifyRegistrationLimit = async () => {
+      try {
+        const status = await apiService.getRegistrationStatus()
+        if (active && status) {
+          if (typeof status.count === 'number') {
+            setRegisteredCount(status.count)
+          }
+          if (status.isRegistrationClosed || status.count >= 60) {
+            setIsRegistrationClosed(true)
+            setShowClosedModal(true)
+          }
+        }
+      } catch (err) {
+        console.warn('Could not verify registration limit on load:', err)
+      } finally {
+        if (active) setCheckingStatus(false)
+      }
+    }
+    verifyRegistrationLimit()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // File upload handling
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,6 +235,12 @@ export default function Register() {
     // Prevent double submission
     if (submitting) return
 
+    // Strict 60-team registration limit guard
+    if (isRegistrationClosed) {
+      setShowClosedModal(true)
+      return
+    }
+
     // Validate required payment details prior to submission
     if (!values.paymentScreenshotData) {
       setScreenshotError('Payment screenshot is required. Please upload a PNG, JPG, JPEG or WEBP image under 5 MB.')
@@ -254,12 +291,28 @@ export default function Register() {
           state: { registration: response.data }
         })
       } else {
+        const isClosed =
+          response?.errorCode === 'REGISTRATION_CLOSED' ||
+          response?.error?.includes('limit of 60') ||
+          response?.error?.includes('Registration Closed')
+
+        if (isClosed) {
+          setIsRegistrationClosed(true)
+          setShowClosedModal(true)
+        }
         setSubmissionError(
           response?.error || 'Registration could not be completed. Please try again.'
         )
       }
     } catch (err: any) {
       console.error('Registration submission error:', err)
+      const isClosed =
+        err?.message?.includes('limit of 60') ||
+        err?.message?.includes('Registration Closed')
+      if (isClosed) {
+        setIsRegistrationClosed(true)
+        setShowClosedModal(true)
+      }
       const isConnectionError =
         err?.message?.includes('Failed to fetch') ||
         err?.message?.includes('NetworkError') ||
@@ -317,6 +370,35 @@ export default function Register() {
             {EVENT_CONFIG.eventDate} · Fee: {EVENT_CONFIG.feeDisplay} per team
           </p>
         </div>
+
+        {/* Registration Closed Banner */}
+        {isRegistrationClosed && (
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-200 backdrop-blur-md shadow-[0_0_30px_rgba(239,68,68,0.15)] flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-red-500/20 text-red-400 mt-0.5 shrink-0 shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                <Lock size={20} />
+              </div>
+              <div>
+                <div className="font-display font-bold text-sm sm:text-base text-red-100 tracking-wide flex items-center gap-2">
+                  REGISTRATION CLOSED
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 uppercase tracking-widest">
+                    60 / 60 TEAMS
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-red-200/90 leading-relaxed font-sans mt-1">
+                  Registration Closed — The maximum registration limit of 60 teams has been reached.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowClosedModal(true)}
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-mono text-xs tracking-wider transition-all cursor-pointer whitespace-nowrap"
+            >
+              VIEW DETAILS
+            </button>
+          </div>
+        )}
 
         {/* Progress Indicator */}
         <div className="mb-10 bg-brand-card/80 border border-brand-border/80 p-4 rounded-xl backdrop-blur-md">
@@ -1163,7 +1245,15 @@ export default function Register() {
                 STEP {step} OF 3
               </div>
 
-              {step < 3 ? (
+              {isRegistrationClosed ? (
+                <button
+                  type="button"
+                  onClick={() => setShowClosedModal(true)}
+                  className="px-7 py-3 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-display font-black text-xs sm:text-sm tracking-widest flex items-center gap-2 shadow-[0_0_25px_rgba(239,68,68,0.4)] transition-all cursor-pointer"
+                >
+                  <Lock size={16} /> REGISTRATION CLOSED
+                </button>
+              ) : step < 3 ? (
                 <button
                   type="button"
                   onClick={handleNext}
@@ -1188,6 +1278,66 @@ export default function Register() {
           </div>
         </form>
       </div>
+
+      {/* Registration Closed Modal / Popup */}
+      <AnimatePresence>
+        {showClosedModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2 }}
+              className="relative w-full max-w-lg bg-brand-surface/95 border border-red-500/40 rounded-2xl p-6 sm:p-8 shadow-[0_0_50px_rgba(239,68,68,0.25)] backdrop-blur-xl text-center"
+            >
+              <button
+                type="button"
+                onClick={() => setShowClosedModal(false)}
+                className="absolute top-4 right-4 p-2 rounded-lg text-brand-muted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+                <Lock size={32} />
+              </div>
+
+              <div className="inline-block px-3 py-1 mb-3 rounded-full bg-red-500/10 border border-red-500/20 font-mono text-[11px] font-bold text-red-400 uppercase tracking-widest">
+                CAPACITY REACHED (60/60)
+              </div>
+
+              <h2 className="font-display font-black text-xl sm:text-2xl text-white tracking-tight mb-3">
+                REGISTRATION CLOSED
+              </h2>
+
+              <p className="font-mono text-xs sm:text-sm text-red-300 font-semibold mb-3 leading-relaxed">
+                Registration Closed — The maximum registration limit of 60 teams has been reached.
+              </p>
+
+              <p className="text-xs sm:text-sm text-brand-muted leading-relaxed font-sans mb-6">
+                Thank you for the tremendous enthusiasm and overwhelming response for {EVENT_CONFIG.eventName}. All 60 team slots have been officially filled. No further registrations can be accepted.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link
+                  to="/"
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-display font-bold text-xs tracking-widest transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)] hover:scale-105 flex items-center justify-center gap-2"
+                >
+                  RETURN TO HOME <ArrowRight size={14} />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setShowClosedModal(false)}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-brand-card border border-brand-border hover:border-brand-muted text-brand-muted hover:text-white font-mono text-xs tracking-wider transition-colors cursor-pointer"
+                >
+                  DISMISS
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </main>
   )
 }

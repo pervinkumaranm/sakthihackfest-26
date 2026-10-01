@@ -24,8 +24,16 @@ export const config = {
 
 // ── Default Constants ──────────────────────────────────────────────────────
 const DEFAULT_SPREADSHEET_ID = '1F_XlNsLdUXx31w92caKs5jidCeI0jcZIMY_TPPBJefE';
-const DEFAULT_DRIVE_ROOT_FOLDER_ID = '10CljhVy7pYl5VTcjh6y8WK8yA0KF58Ov';
+const DEFAULT_PROOFS_FOLDER_ID = '1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC';
+const DEFAULT_DRIVE_ROOT_FOLDER_ID = '1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC';
 const SHEET_TAB_NAME = 'Registrations';
+
+const MAX_REGISTRATION_LIMIT = 60;
+const REGISTRATION_CLOSED_MESSAGE =
+  'Registration Closed — The maximum registration limit of 60 teams has been reached.';
+
+const DEFAULT_GAS_URL =
+  'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec';
 
 const ROOT_FOLDER_NAME = 'SAKTHI HACKFEST 2K26';
 const PROOFS_FOLDER_NAME = 'Payment Proofs';
@@ -244,21 +252,13 @@ async function uploadPaymentProofToDrive(
   fileName: string
 ): Promise<{ fileId: string; viewUrl: string }> {
   loadLocalEnvIfNeeded();
-  let rootFolderId =
+  // 1. Target the SAKTHI HACKFEST 2K26 / Payment Proofs folder directly
+  const proofsFolderId =
+    cleanGoogleId(process.env.GOOGLE_DRIVE_PAYMENT_PROOFS_FOLDER_ID) ||
     cleanGoogleId(process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) ||
-    DEFAULT_DRIVE_ROOT_FOLDER_ID;
-  if (!rootFolderId) {
-    rootFolderId = await getOrCreateFolder(drive, ROOT_FOLDER_NAME);
-  }
+    DEFAULT_PROOFS_FOLDER_ID;
 
-  // 2. Find or create Payment Proofs inside root folder
-  const proofsFolderId = await getOrCreateFolder(
-    drive,
-    PROOFS_FOLDER_NAME,
-    rootFolderId
-  );
-
-  // 3. Create unique registration folder SHF26-XXXXXX inside Payment Proofs
+  // 2. Create or get unique registration folder SHF26-XXXXXX inside Payment Proofs
   const regFolderId = await getOrCreateFolder(
     drive,
     registrationId,
@@ -390,6 +390,28 @@ async function ensureSheetAndGetHeaders(
   const headers = values[0].map((h: any) => String(h || '').trim());
   const existingRows = values.slice(1);
   return { headers, existingRows, tabName };
+}
+
+function getSuccessfullyRegisteredCount(existingRows: any[][], headers: string[]): number {
+  const norm = (s: string) =>
+    String(s || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]/g, '');
+
+  const idColIdx = headers.findIndex(h => norm(h) === 'registrationid');
+  if (idColIdx === -1) {
+    return existingRows.filter(r => r.length > 0 && r.some(c => String(c || '').trim() !== '')).length;
+  }
+
+  let count = 0;
+  for (const row of existingRows) {
+    const regId = String(row[idColIdx] || '').trim();
+    if (regId && (regId.toUpperCase().startsWith('SHF26-') || regId.length >= 6)) {
+      count++;
+    }
+  }
+  return count;
 }
 
 function checkDuplicateSubmission(
@@ -843,7 +865,7 @@ async function processRegistration(rawPayload: any) {
 
   const gmailAuth = getGmailAuth();
   const sheets = google.sheets({ version: 'v4', auth: saAuth });
-  const drive = google.drive({ version: 'v3', auth: gmailAuth || saAuth });
+  const drive = google.drive({ version: 'v3', auth: saAuth });
   const spreadsheetId =
     cleanGoogleId(process.env.GOOGLE_SPREADSHEET_ID) || DEFAULT_SPREADSHEET_ID;
 
@@ -864,6 +886,23 @@ async function processRegistration(rawPayload: any) {
         success: false,
         stage: 'sheet',
         message: `Failed to connect to Google Sheet: ${sheetErr.message || 'Check spreadsheet permissions and ID.'}`,
+      },
+    };
+  }
+
+  // Enforce Atomic 60-team registration limit strictly
+  const currentRegisteredCount = getSuccessfullyRegisteredCount(existingRows, headers);
+  console.log(`Current registered teams count: ${currentRegisteredCount} / ${MAX_REGISTRATION_LIMIT}`);
+  if (currentRegisteredCount >= MAX_REGISTRATION_LIMIT) {
+    return {
+      status: 403,
+      body: {
+        success: false,
+        stage: 'registration_limit',
+        errorCode: 'REGISTRATION_CLOSED',
+        message: REGISTRATION_CLOSED_MESSAGE,
+        count: currentRegisteredCount,
+        limit: MAX_REGISTRATION_LIMIT,
       },
     };
   }
@@ -1144,11 +1183,147 @@ async function processRegistration(rawPayload: any) {
   };
 }
 
+// ── Apps Script Forwarder & Status Check ────────────────────────────────────
+
+function getActiveGasUrl(): string {
+  loadLocalEnvIfNeeded();
+  const envUrl = process.env.GAS_WEB_APP_URL || process.env.VITE_GOOGLE_SCRIPT_URL;
+  // If envUrl is missing, or points to the old deployment, always prioritize the active verified URL
+  if (!envUrl || envUrl.includes('AKfycby1wwXdxr6hgymC-Xa8rVvJv0vsEe4UeLMG2O6A5bklfVCXpjHkAm3_5AjCDEckZF5e1g')) {
+    return DEFAULT_GAS_URL;
+  }
+  return envUrl;
+}
+
+async function forwardToAppsScript(payload: any) {
+  const gasUrl = getActiveGasUrl();
+
+  if (!gasUrl) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
+
+    const gasResponse = await fetch(gasUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'SUBMIT_REGISTRATION',
+        data: payload.data || payload,
+        ...(payload.data || payload),
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const gasText = await gasResponse.text();
+    let gasResult: any;
+    try {
+      gasResult = JSON.parse(gasText);
+    } catch {
+      return null;
+    }
+
+    if (gasResult && typeof gasResult === 'object') {
+      const isClosed =
+        gasResult.errorCode === 'REGISTRATION_CLOSED' ||
+        (typeof gasResult.message === 'string' && gasResult.message.includes('60')) ||
+        (typeof gasResult.message === 'string' && gasResult.message.includes('Registration Closed'));
+
+      return {
+        status: isClosed ? 403 : gasResult.success ? 200 : 400,
+        body: isClosed
+          ? {
+              success: false,
+              stage: 'registration_limit',
+              errorCode: 'REGISTRATION_CLOSED',
+              message: REGISTRATION_CLOSED_MESSAGE,
+              ...gasResult,
+            }
+          : gasResult,
+      };
+    }
+  } catch (err: any) {
+    console.warn('Apps Script forward warning, falling back to direct API:', err?.message || err);
+  }
+  return null;
+}
+
+async function getRegistrationStatusCount() {
+  // 1. Try Apps Script
+  const gasUrl = getActiveGasUrl();
+
+  if (gasUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${gasUrl}?action=GET_COUNT`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.count === 'number') {
+          return {
+            success: true,
+            count: data.count,
+            limit: MAX_REGISTRATION_LIMIT,
+            isRegistrationClosed: data.count >= MAX_REGISTRATION_LIMIT,
+            message:
+              data.count >= MAX_REGISTRATION_LIMIT
+                ? REGISTRATION_CLOSED_MESSAGE
+                : 'Registration Open',
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 2. Direct Service Account fallback
+  try {
+    const saAuth = getServiceAccountAuth();
+    const sheets = google.sheets({ version: 'v4', auth: saAuth });
+    const spreadsheetId =
+      cleanGoogleId(process.env.GOOGLE_SPREADSHEET_ID) || DEFAULT_SPREADSHEET_ID;
+    const sheetData = await ensureSheetAndGetHeaders(sheets, spreadsheetId);
+    const count = getSuccessfullyRegisteredCount(sheetData.existingRows, sheetData.headers);
+    return {
+      success: true,
+      count,
+      limit: MAX_REGISTRATION_LIMIT,
+      isRegistrationClosed: count >= MAX_REGISTRATION_LIMIT,
+      message:
+        count >= MAX_REGISTRATION_LIMIT
+          ? REGISTRATION_CLOSED_MESSAGE
+          : 'Registration Open',
+    };
+  } catch (_) {
+    return {
+      success: false,
+      count: 0,
+      limit: MAX_REGISTRATION_LIMIT,
+      isRegistrationClosed: false,
+      message: 'Could not fetch live registration count.',
+    };
+  }
+}
+
 // ── HTTP Handler for Vercel / Node ──────────────────────────────────────────
 
 export default async function handler(req: any, res?: any) {
   // Edge / Fetch Request format
   if (req instanceof Request || (!res && typeof req.json === 'function')) {
+    const url = new URL(req.url || '', 'http://localhost');
+    const action = url.searchParams.get('action');
+
+    if (req.method === 'GET' || action === 'GET_COUNT') {
+      const countRes = await getRegistrationStatusCount();
+      return new Response(JSON.stringify(countRes), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ success: false, message: 'Method Not Allowed' }),
@@ -1166,6 +1341,15 @@ export default async function handler(req: any, res?: any) {
       );
     }
 
+    // Try GAS first for native email sending (MailApp) and Drive folder creation
+    const gasResult = await forwardToAppsScript(payload);
+    if (gasResult) {
+      return new Response(JSON.stringify(gasResult.body), {
+        status: gasResult.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const result = await processRegistration(payload);
     return new Response(JSON.stringify(result.body), {
       status: result.status,
@@ -1173,7 +1357,13 @@ export default async function handler(req: any, res?: any) {
     });
   }
 
-  // Node.js Request format (Vercel Node Serverless Function)
+  // Node.js Request format (Vercel Node Serverless Function & Vite dev server)
+  const queryAction = req.query?.action;
+  if (req.method === 'GET' || queryAction === 'GET_COUNT') {
+    const countRes = await getRegistrationStatusCount();
+    return res.status(200).json(countRes);
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method Not Allowed' });
   }
@@ -1181,6 +1371,13 @@ export default async function handler(req: any, res?: any) {
   try {
     const payload =
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+    // Try GAS first for native email sending (MailApp) and Drive folder creation
+    const gasResult = await forwardToAppsScript(payload);
+    if (gasResult) {
+      return res.status(gasResult.status).json(gasResult.body);
+    }
+
     const result = await processRegistration(payload);
     return res.status(result.status).json(result.body);
   } catch (err: any) {

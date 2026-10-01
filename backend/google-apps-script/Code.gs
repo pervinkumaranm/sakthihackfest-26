@@ -18,14 +18,18 @@ const SSEC_LOGO_BASE64 = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAgMDAwMDBA
 
 // ── Central Configuration ──────────────────────────────────────────────────
 const CONFIG = {
-  // Target Spreadsheet ID: leave empty or use your spreadsheet ID
-  // If the script is bound to the sheet (Extensions > Apps Script), it auto-detects!
-  SPREADSHEET_ID: "1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0",
+  // Target Spreadsheet ID: Active hackfest26 sheet
+  SPREADSHEET_ID: "1F_XlNsLdUXx31w92caKs5jidCeI0jcZIMY_TPPBJefE",
   SHEET_NAME: "Registrations",
 
   // Drive folder hierarchy: SAKTHI HACKFEST 2K26 -> Payment Proofs -> <REGISTRATION_ID>
   DRIVE_PARENT_FOLDER_NAME: "SAKTHI HACKFEST 2K26",
   PROOFS_FOLDER_NAME: "Payment Proofs",
+  // Target Payment Proofs Folder ID (provided by organizer)
+  PROOFS_FOLDER_ID: "1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC",
+
+  // Registration Limit: strictly 60 teams maximum
+  MAX_REGISTRATION_LIMIT: 60,
 
   EVENT_NAME: "Sakthi HackFest'26",
   EVENT_DATE: "10-11 October 2026",
@@ -128,16 +132,34 @@ function doGet(e) {
       return buildJsonResponse({ success: true, data: data });
     }
 
+    if (action === "GET_COUNT" || action === "REGISTRATION_COUNT") {
+      const sheet = getOrCreateRegistrationSheet();
+      const count = getSuccessfullyRegisteredCount(sheet);
+      return buildJsonResponse({
+        success: true,
+        count: count,
+        limit: CONFIG.MAX_REGISTRATION_LIMIT,
+        isRegistrationClosed: count >= CONFIG.MAX_REGISTRATION_LIMIT,
+        timestamp: formatTimestamp(new Date())
+      });
+    }
+
     if (action === "TEST_WRITE") {
       testSheetWrite();
       return buildJsonResponse({ success: true, message: "testSheetWrite executed successfully." });
     }
+
+    const sheet = getOrCreateRegistrationSheet();
+    const count = getSuccessfullyRegisteredCount(sheet);
 
     return buildJsonResponse({
       success: true,
       message: "SAKTHI HACKFEST 2K26 Registration API Active",
       spreadsheetId: CONFIG.SPREADSHEET_ID,
       sheetName: CONFIG.SHEET_NAME,
+      registeredCount: count,
+      limit: CONFIG.MAX_REGISTRATION_LIMIT,
+      isRegistrationClosed: count >= CONFIG.MAX_REGISTRATION_LIMIT,
       timestamp: formatTimestamp(new Date())
     });
 
@@ -205,7 +227,22 @@ function handleRegistrationSubmission(payload) {
     }, 200);
   }
 
-  // 4. Generate Unique Random Registration ID: SHF26-XXXXXX
+  // 4. Atomic Concurrency Registration Limit Check (Strictly 60 Teams Maximum)
+  const currentCount = getSuccessfullyRegisteredCount(sheet);
+  console.log("CURRENT REGISTERED TEAMS COUNT: " + currentCount + " / " + CONFIG.MAX_REGISTRATION_LIMIT);
+  if (currentCount >= CONFIG.MAX_REGISTRATION_LIMIT) {
+    console.warn("REGISTRATION LIMIT REACHED: " + currentCount + " >= " + CONFIG.MAX_REGISTRATION_LIMIT);
+    return jsonResponse({
+      success: false,
+      stage: "registration_limit",
+      errorCode: "REGISTRATION_CLOSED",
+      message: "Registration Closed — The maximum registration limit of 60 teams has been reached.",
+      currentCount: currentCount,
+      limit: CONFIG.MAX_REGISTRATION_LIMIT
+    });
+  }
+
+  // 5. Generate Unique Random Registration ID: SHF26-XXXXXX
   const registrationId = generateUniqueRegistrationId(sheet);
   console.log("GENERATED ID: " + registrationId);
   console.log("STEP 3: Registration ID: " + registrationId);
@@ -213,7 +250,7 @@ function handleRegistrationSubmission(payload) {
   const now = new Date();
   const timestampStr = formatTimestamp(now);
 
-  // 5. Upload Payment Screenshot to Google Drive
+  // 6. Upload Payment Screenshot to Google Drive (in Payment Proofs folder hierarchy)
   let driveFileUrl = "";
   let driveFileId = "";
 
@@ -225,10 +262,9 @@ function handleRegistrationSubmission(payload) {
       const uploadResult = savePaymentScreenshotToDrive(registrationId, screenshotBase64, screenshotName);
       driveFileUrl = uploadResult.fileUrl;
       driveFileId = uploadResult.fileId;
-      console.log("DRIVE UPLOAD COMPLETE");
-      console.log("STEP 4: Payment upload complete. Drive File ID: " + driveFileId);
+      console.log("DRIVE UPLOAD COMPLETE. File ID: " + driveFileId);
     } catch (driveErr) {
-      console.warn("Drive upload warning (continuing with Sheet and Email): " + driveErr);
+      console.error("Drive upload error: " + driveErr);
       const errMsg = driveErr.toString();
       if (errMsg.includes("PAYMENT_SCREENSHOT_TOO_LARGE")) {
         return jsonResponse({
@@ -246,8 +282,13 @@ function handleRegistrationSubmission(payload) {
           message: "Invalid image format. Only PNG, JPG, JPEG, and WEBP are accepted."
         });
       }
-      driveFileUrl = "DRIVE_PENDING: " + errMsg;
-      driveFileId = "PENDING";
+      // If Drive throws another error, report failure clearly so user can re-try
+      return jsonResponse({
+        success: false,
+        stage: "payment_upload",
+        errorCode: "DRIVE_UPLOAD_ERROR",
+        message: "Failed to upload payment screenshot to Google Drive: " + errMsg
+      });
     }
   } else {
     return jsonResponse({
@@ -681,6 +722,35 @@ function checkDuplicateSubmission(sheet, teamName, leaderEmail, upiTxnId) {
   return null;
 }
 
+// ── Accurate Registration Count Helper (Source of Truth) ──────────────────
+function getSuccessfullyRegisteredCount(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return 0;
+
+  const lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return 0;
+
+  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  let regIdCol = 1;
+  for (let c = 0; c < headerRow.length; c++) {
+    const k = String(headerRow[c] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (k === "registrationid") {
+      regIdCol = c + 1;
+      break;
+    }
+  }
+
+  const values = sheet.getRange(2, regIdCol, lastRow - 1, 1).getValues();
+  let count = 0;
+  for (let i = 0; i < values.length; i++) {
+    const val = String(values[i][0] || "").trim();
+    if (val) {
+      count++;
+    }
+  }
+  return count;
+}
+
 // ── Google Drive Storage: Hierarchy & Upload ───────────────────────────────
 function savePaymentScreenshotToDrive(regId, base64Data, filename) {
   const parts = base64Data.split(",");
@@ -714,25 +784,36 @@ function savePaymentScreenshotToDrive(regId, base64Data, filename) {
   if (mimeType.includes("jpeg")) ext = "jpg";
   else if (mimeType.includes("webp")) ext = "webp";
 
-  // Parent folder: SAKTHI HACKFEST 2K26
-  let parentFolder;
-  const parentFolders = DriveApp.getFoldersByName(CONFIG.DRIVE_PARENT_FOLDER_NAME);
-  if (parentFolders.hasNext()) {
-    parentFolder = parentFolders.next();
-  } else {
-    parentFolder = DriveApp.createFolder(CONFIG.DRIVE_PARENT_FOLDER_NAME);
+  // Locate Payment Proofs Folder (by direct ID or name hierarchy)
+  let proofsFolder = null;
+  if (CONFIG.PROOFS_FOLDER_ID) {
+    try {
+      proofsFolder = DriveApp.getFolderById(CONFIG.PROOFS_FOLDER_ID);
+    } catch (idErr) {
+      console.warn("Could not open folder by ID " + CONFIG.PROOFS_FOLDER_ID + ": " + idErr);
+    }
   }
 
-  // Subfolder: Payment Proofs
-  let proofsFolder;
-  const proofsFolders = parentFolder.getFoldersByName(CONFIG.PROOFS_FOLDER_NAME);
-  if (proofsFolders.hasNext()) {
-    proofsFolder = proofsFolders.next();
-  } else {
-    proofsFolder = parentFolder.createFolder(CONFIG.PROOFS_FOLDER_NAME);
+  if (!proofsFolder) {
+    // Parent folder: SAKTHI HACKFEST 2K26
+    let parentFolder;
+    const parentFolders = DriveApp.getFoldersByName(CONFIG.DRIVE_PARENT_FOLDER_NAME);
+    if (parentFolders.hasNext()) {
+      parentFolder = parentFolders.next();
+    } else {
+      parentFolder = DriveApp.createFolder(CONFIG.DRIVE_PARENT_FOLDER_NAME);
+    }
+
+    // Subfolder: Payment Proofs
+    const proofsFolders = parentFolder.getFoldersByName(CONFIG.PROOFS_FOLDER_NAME);
+    if (proofsFolders.hasNext()) {
+      proofsFolder = proofsFolders.next();
+    } else {
+      proofsFolder = parentFolder.createFolder(CONFIG.PROOFS_FOLDER_NAME);
+    }
   }
 
-  // Registration ID folder: SHF26-XXXXXX
+  // Registration ID folder: SHF26-XXXXXX inside Payment Proofs
   let regFolder;
   const regFolders = proofsFolder.getFoldersByName(regId);
   if (regFolders.hasNext()) {
@@ -746,6 +827,13 @@ function savePaymentScreenshotToDrive(regId, base64Data, filename) {
   const decodedBytes = Utilities.base64Decode(rawBase64);
   const decodedBlob = Utilities.newBlob(decodedBytes, mimeType, targetFileName);
   const file = regFolder.createFile(decodedBlob);
+
+  // Set view permission for the link
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (permErr) {
+    console.warn("Could not set anyone with link view permission: " + permErr);
+  }
 
   return {
     fileUrl: file.getUrl(),

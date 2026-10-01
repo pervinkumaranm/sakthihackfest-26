@@ -1,10 +1,32 @@
-import { useRef } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { EVENT_CONFIG } from '../../config/event'
+import { apiService } from '../services/api'
 
 export default function EventIntro() {
   const ref = useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { once: true, margin: '-100px' })
+  const [registeredTeamsCount, setRegisteredTeamsCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const fetchRegisteredCount = async () => {
+      try {
+        const res = await apiService.getRegistrationStatus()
+        if (active && res && typeof res.count === 'number') {
+          setRegisteredTeamsCount(res.count)
+        }
+      } catch (e) {
+        console.warn('Failed to load registered teams count:', e)
+      }
+    }
+    fetchRegisteredCount()
+    const timer = setInterval(fetchRegisteredCount, 30000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [])
 
   const stats = EVENT_CONFIG.stats
 
@@ -71,24 +93,36 @@ export default function EventIntro() {
 
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-4">
-            {stats.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={inView ? { opacity: 1, scale: 1 } : {}}
-                transition={{ duration: 0.5, delay: 0.5 + i * 0.1 }}
-                className="bg-brand-card border border-brand-border p-6 relative overflow-hidden group hover:border-brand-primary/50 transition-all duration-300"
-              >
-                <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-brand-primary to-brand-orange scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-                <div className="font-display font-black text-4xl text-gradient-fire mb-1">
-                  {stat.value}
-                </div>
-                <div className="font-mono text-xs text-brand-muted tracking-widest">{stat.label}</div>
-                {stat.sublabel && (
-                  <div className="font-mono text-[10px] text-brand-primary tracking-widest mt-1">{stat.sublabel}</div>
-                )}
-              </motion.div>
-            ))}
+            {stats.map((stat, i) => {
+              const isTeamsCard = stat.label.toLowerCase().includes('team')
+
+              return (
+                <motion.div
+                  key={stat.label}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={inView ? { opacity: 1, scale: 1 } : {}}
+                  transition={{ duration: 0.5, delay: 0.5 + i * 0.1 }}
+                  className="bg-brand-card border border-brand-border p-6 relative overflow-hidden group hover:border-brand-primary/50 transition-all duration-300"
+                >
+                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-brand-primary to-brand-orange scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
+                  <div className="font-display font-black text-4xl text-gradient-fire mb-1">
+                    {stat.value}
+                  </div>
+                  <div className="font-mono text-xs text-brand-muted tracking-widest">{stat.label}</div>
+                  {stat.sublabel && (
+                    <div className="font-mono text-[10px] text-brand-primary tracking-widest mt-1">{stat.sublabel}</div>
+                  )}
+                  {isTeamsCard && (
+                    <div className="font-mono text-[11px] sm:text-xs text-brand-primary font-bold tracking-wider mt-2.5 pt-2 border-t border-brand-border/60 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse shrink-0" />
+                      <span>
+                        Registered Teams : {registeredTeamsCount !== null ? registeredTeamsCount : '...'}
+                      </span>
+                    </div>
+                  )}
+                </motion.div>
+              )
+            })}
           </div>
         </div>
 

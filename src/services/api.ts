@@ -44,6 +44,13 @@ function saveLocalRegistrations(list: StoredRegistration[]) {
 }
 
 function getFriendlyErrorMessage(errorCode?: string, rawMessage?: string): string {
+  if (
+    errorCode === 'REGISTRATION_CLOSED' ||
+    rawMessage?.includes('limit of 60') ||
+    rawMessage?.includes('Registration Closed')
+  ) {
+    return 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
+  }
   if (errorCode === 'NETWORK_ERROR') {
     return 'Unable to connect to the registration server. Please check your internet connection and try again.'
   }
@@ -146,9 +153,17 @@ export const apiService = {
       }
 
       if (!result.success) {
-        throw new Error(
-          result.message || "Registration could not be completed."
-        );
+        const isClosed =
+          result.errorCode === 'REGISTRATION_CLOSED' ||
+          result.message?.includes('60') ||
+          result.message?.includes('Registration Closed')
+        return {
+          success: false,
+          errorCode: isClosed ? 'REGISTRATION_CLOSED' : (result.errorCode || 'REGISTRATION_FAILED'),
+          error: isClosed
+            ? 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
+            : getFriendlyErrorMessage(result.errorCode, result.message),
+        }
       }
 
       // Backend returned success with Server-Generated Registration ID
@@ -192,11 +207,71 @@ export const apiService = {
       };
     } catch (err: any) {
       console.error("REGISTRATION ERROR:", err);
+      const isClosed =
+        err?.message?.includes('60') ||
+        err?.message?.includes('Registration Closed');
       return {
         success: false,
-        errorCode: 'REGISTRATION_FAILED',
-        error: err.message || 'Registration could not be completed. Please try again.',
+        errorCode: isClosed ? 'REGISTRATION_CLOSED' : 'REGISTRATION_FAILED',
+        error: isClosed
+          ? 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
+          : err.message || 'Registration could not be completed. Please try again.',
       };
+    }
+  },
+
+  /**
+   * Check Live Registration Status & Limit
+   */
+  async getRegistrationStatus(): Promise<{
+    success: boolean
+    count: number
+    limit: number
+    isRegistrationClosed: boolean
+    message?: string
+  }> {
+    try {
+      const res = await fetch('/api/register?action=GET_COUNT')
+      if (res.ok) {
+        const data = await res.json()
+        if (data && typeof data.count === 'number') {
+          return {
+            success: true,
+            count: data.count,
+            limit: data.limit || 60,
+            isRegistrationClosed: Boolean(data.isRegistrationClosed || data.count >= (data.limit || 60)),
+            message: data.message,
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not query /api/register count:', err)
+    }
+
+    // Direct Apps Script query fallback
+    try {
+      const gasUrl =
+        'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec?action=GET_COUNT'
+      const res = await fetch(gasUrl)
+      if (res.ok) {
+        const data = await res.json()
+        if (data && typeof data.count === 'number') {
+          return {
+            success: true,
+            count: data.count,
+            limit: data.limit || 60,
+            isRegistrationClosed: Boolean(data.isRegistrationClosed || data.count >= (data.limit || 60)),
+            message: data.message,
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {
+      success: false,
+      count: 0,
+      limit: 60,
+      isRegistrationClosed: false,
     }
   },
 

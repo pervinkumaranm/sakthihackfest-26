@@ -190,7 +190,7 @@ export const EVENT_CONFIG: EventConfig = {
   stats: [
     { label: "HOURS OF CODE", value: "24", suffix: "HRS" },
     { label: "PRIZE POOL", value: "50000", suffix: "" }, // TODO: OFFICIAL EVENT DATA
-    { label: "TEAMS SELECTED", sublabel: "(FIRST COME FIRST SERVE)", value: "40", suffix: "TEAMS" },
+    { label: "TEAMS SELECTED", sublabel: "(FIRST COME FIRST SERVE)", value: "60", suffix: "TEAMS" },
     { label: "INNOVATION DOMAINS", value: "05", suffix: "DOMAINS" },
   ],
 
