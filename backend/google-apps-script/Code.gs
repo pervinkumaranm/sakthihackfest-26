@@ -843,16 +843,16 @@ function savePaymentScreenshotToDrive(regId, base64Data, filename) {
 
 // ── Email Automation ───────────────────────────────────────────────────────
 function sendConfirmationEmail(data) {
-  // Required format: Registration received Sakthi HackFest'26 | {{REGISTRATION_ID}}
-  const subject = "Registration received Sakthi HackFest'26 | " + data.registrationId;
+  // Required format: Registration Received | Sakthi HackFest'26 | {{REGISTRATION_ID}}
+  const subject = "Registration Received | Sakthi HackFest'26 | " + data.registrationId;
   const htmlBody = buildConfirmationEmailHtml(data);
   const plainTextBody = buildConfirmationEmailPlainText(data);
 
-  // Prepare inline CID logo for Gmail compatibility (prevents broken image icon)
+  // Prepare inline CID logo without file extension so Gmail renders it inline without attachment chip
   let inlineImages = {};
   try {
-    const logoBlob = Utilities.newBlob(Utilities.base64Decode(SSEC_LOGO_BASE64), "image/jpeg", "college-logo.jpg");
-    inlineImages["collegeLogo"] = logoBlob;
+    const logoBlob = Utilities.newBlob(Utilities.base64Decode(SSEC_LOGO_BASE64), "image/jpeg", "Sree Sakthi Engineering College");
+    inlineImages["ii_1a0f3c65b505ce282231"] = logoBlob;
   } catch (err) {
     Logger.log("Notice: inline logo blob error: " + err.message);
   }
@@ -918,177 +918,221 @@ function buildConfirmationEmailPlainText(d) {
 }
 
 function buildConfirmationEmailHtml(d) {
-  return `
-<!DOCTYPE html>
-<html>
+  return `<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registration received Sakthi HackFest'26 | ${escapeHtml(d.registrationId)}</title>
+  <title>Sakthi HackFest'26 Registration Acknowledgement</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f7; padding: 30px 12px;">
+<body style="margin: 0; padding: 0; background-color: #f7f7f7; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased; color: #111111;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f7f7f7; padding: 24px 12px;">
     <tr>
       <td align="center">
-        <!-- Main Container -->
-        <table role="presentation" width="100%" style="max-width: 620px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.07); border: 1px solid #e4e4e7;">
-          
-          <!-- 1. HEADER: College Official Banner Logo -->
+        <!-- Main Container Card -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 650px; background-color: #ffffff; border: 1px solid #dddddd; border-radius: 4px; overflow: hidden;">
           <tr>
-            <td style="padding: 24px 28px 12px 28px; background-color: #ffffff; text-align: center;">
-              <img src="cid:collegeLogo" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;" />
-              <div style="border-top: 1px solid #dddddd; margin-top: 20px;"></div>
-            </td>
-          </tr>
+            <td style="padding: 28px 32px 32px 32px; background-color: #ffffff;">
+             
+              <!-- 1. HEADER: College Official Banner Logo -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 16px;">
+                <tr>
+                  <td align="center" style="padding: 4px 0 10px 0;">
+                    <img src="cid:ii_1a0f3c65b505ce282231" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;">
+                  </td>
+                </tr>
+              </table>
 
-          <!-- White Content Area -->
-          <tr>
-            <td style="padding: 34px 32px 24px 32px; background-color: #ffffff;">
-              <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.6; color: #18181b;">
+              <!-- Divider below header -->
+              <div style="border-top: 1px solid #dddddd; margin-bottom: 22px;"></div>
+
+              <!-- 2. GREETING -->
+              <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.5; color: #111111;">
                 Dear <strong>${escapeHtml(d.leaderName)}</strong>,
               </p>
-              <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 1.65; color: #3f3f46;">
-                Thank you for registering for <strong>Sakthi HackFest'26</strong>, a 24-hour hackathon at Sree Sakthi Engineering College!
+              <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.55; color: #333333;">
+                Thank you for registering for <strong>Sakthi HackFest'26</strong>, a 24-hour hackathon at Sree Sakthi Engineering College. We're excited to have you on board and look forward to your participation.
               </p>
 
-              <!-- Your Registration Details Box -->
-              <div style="margin-bottom: 26px; background-color: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 20px;">
-                <div style="font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: #dc2626; text-transform: uppercase; margin-bottom: 14px; border-bottom: 1px solid #e4e4e7; padding-bottom: 8px;">
-                  Your registration details
-                </div>
-                <table role="presentation" width="100%" style="border-collapse: collapse; font-size: 14px;">
-                  <tr>
-                    <td style="padding: 7px 0; color: #71717a; width: 35%; font-weight: 600;">Team name:</td>
-                    <td style="padding: 7px 0; color: #09090b; font-weight: 700;">${escapeHtml(d.teamName)}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 9px 0; color: #71717a; font-weight: 600;">Team ID:</td>
-                    <td style="padding: 9px 0;">
-                      <span style="display: inline-block; background-color: #fef2f2; border: 1px solid #f87171; color: #b91c1c; font-weight: 800; font-family: monospace; font-size: 16px; padding: 5px 12px; border-radius: 6px; letter-spacing: 1.5px;">
-                        ${escapeHtml(d.registrationId)}
-                      </span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 7px 0; color: #71717a; font-weight: 600; vertical-align: top;">Members:</td>
-                    <td style="padding: 7px 0; color: #09090b; font-weight: 600; line-height: 1.6;">${escapeHtml(d.teamMemberNames)}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 7px 0; color: #71717a; font-weight: 600;">Hackathon Domain:</td>
-                    <td style="padding: 7px 0; color: #09090b; font-weight: 700;">${escapeHtml(d.selectedDomain || "Generative AI")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 7px 0; color: #71717a; font-weight: 600;">Accommodation:</td>
-                    <td style="padding: 7px 0; color: #09090b; font-weight: 700;">${escapeHtml(d.accommodationRequired || "No")}</td>
-                  </tr>
-                </table>
+              <!-- 3. REGISTRATION DETAILS -->
+              <div style="font-size: 13px; font-weight: 800; letter-spacing: 0.6px; color: #111111; text-transform: uppercase; margin-bottom: 8px;">
+                REGISTRATION DETAILS
+              </div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid #dddddd; border-radius: 4px; background-color: #fafafa; margin-bottom: 20px; border-collapse: separate; border-spacing: 0;">
+                <tr>
+                  <td style="padding: 10px 14px; width: 140px; color: #555555; font-size: 13.5px; font-weight: 600; border-bottom: 1px solid #eeeeee;">Team Name</td>
+                  <td style="padding: 10px 6px; width: 12px; color: #555555; font-weight: 600; border-bottom: 1px solid #eeeeee;">:</td>
+                  <td style="padding: 10px 14px; color: #111111; font-size: 13.5px; font-weight: 700; border-bottom: 1px solid #eeeeee;">${escapeHtml(d.teamName)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 14px; color: #555555; font-size: 13.5px; font-weight: 600; border-bottom: 1px solid #eeeeee;">Team ID</td>
+                  <td style="padding: 10px 6px; color: #555555; font-weight: 600; border-bottom: 1px solid #eeeeee;">:</td>
+                  <td style="padding: 10px 14px; border-bottom: 1px solid #eeeeee;">
+                    <span style="display: inline-block; background-color: #e5e7eb; color: #111111; font-size: 13.5px; font-weight: 700; font-family: monospace, Arial, sans-serif; padding: 3px 10px; border-radius: 4px; border: 1px solid #d1d5db; letter-spacing: 0.8px;">
+                      ${escapeHtml(d.registrationId)}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 14px; color: #555555; font-size: 13.5px; font-weight: 600; vertical-align: top; border-bottom: 1px solid #eeeeee;">Team Members</td>
+                  <td style="padding: 10px 6px; color: #555555; font-weight: 600; vertical-align: top; border-bottom: 1px solid #eeeeee;">:</td>
+                  <td style="padding: 10px 14px; color: #111111; font-size: 13.5px; font-weight: 700; line-height: 1.5; border-bottom: 1px solid #eeeeee;">${escapeHtml(d.teamMemberNames)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 14px; color: #555555; font-size: 13.5px; font-weight: 600;">Accommodation</td>
+                  <td style="padding: 10px 6px; color: #555555; font-weight: 600;">:</td>
+                  <td style="padding: 10px 14px; color: #111111; font-size: 13.5px; font-weight: 700;">${escapeHtml(d.accommodationRequired || "No")}</td>
+                </tr>
+              </table>
 
-                <!-- Payment Status Notice -->
-                <div style="margin-top: 16px; padding: 14px 16px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px;">
-                  <div style="font-size: 13.5px; font-weight: 700; color: #92400e; margin-bottom: 4px;">
-                    Payment status: Received, verification in progress.
-                  </div>
-                  <div style="font-size: 13px; color: #78350f; line-height: 1.55;">
-                    Your registration will be confirmed once your payment is verified. We will email you when it is.
-                  </div>
-                </div>
+              <!-- 4. PAYMENT STATUS -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 4px; padding: 14px 16px; margin-bottom: 22px;">
+                <tr>
+                  <td width="36" valign="middle" style="padding-right: 12px; font-size: 24px; line-height: 1;">
+                    💳
+                  </td>
+                  <td valign="middle">
+                    <div style="font-size: 13.5px; font-weight: 700; color: #111111; margin-bottom: 3px;">
+                      Payment status: Received, verification in progress.
+                    </div>
+                    <div style="font-size: 12.5px; color: #555555; line-height: 1.45;">
+                      Your registration will be confirmed once your payment is verified. We will email you when it is.
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 5. EVENT DETAILS -->
+              <div style="font-size: 13px; font-weight: 800; letter-spacing: 0.6px; color: #111111; text-transform: uppercase; margin-bottom: 8px;">
+                EVENT DETAILS
+              </div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size: 13.5px; line-height: 1.6; margin-bottom: 22px;">
+                <tr>
+                  <td style="padding: 4px 0; width: 140px; color: #555555; font-weight: 600;">Dates</td>
+                  <td style="padding: 4px 6px; width: 12px; color: #555555; font-weight: 600;">:</td>
+                  <td style="padding: 4px 0; color: #111111; font-weight: 500;">10–11 October 2026</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #555555; font-weight: 600; vertical-align: top;">Reporting</td>
+                  <td style="padding: 4px 6px; color: #555555; font-weight: 600; vertical-align: top;">:</td>
+                  <td style="padding: 4px 0; color: #111111; font-weight: 500;">9:00 AM, 10 October 2026, at Sree Sakthi Engineering College</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #555555; font-weight: 600; vertical-align: top;">Venue</td>
+                  <td style="padding: 4px 6px; color: #555555; font-weight: 600; vertical-align: top;">:</td>
+                  <td style="padding: 4px 0; color: #111111; font-weight: 500;">Sree Sakthi Engineering College, Karamadai.</td>
+                </tr>
+              </table>
+
+              <!-- 6. HACKATHON DOMAINS -->
+              <div style="font-size: 13px; font-weight: 800; letter-spacing: 0.6px; color: #111111; text-transform: uppercase; margin-bottom: 8px;">
+                HACKATHON DOMAINS
+              </div>
+              <ul style="margin: 0 0 22px 0; padding-left: 20px; font-size: 13.5px; color: #222222; line-height: 1.8;">
+                <li>Generative AI</li>
+                <li>Cryptography and Cyber Security</li>
+                <li>Sustainable Development Goals</li>
+                <li>Digital Prototyping &amp; Design</li>
+                <li>Web3 &amp; FinTech</li>
+              </ul>
+
+              <!-- 7. IMPORTANT NOTICE -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f7f7f7; border: 1px solid #dddddd; border-radius: 4px; padding: 14px 16px; margin-bottom: 22px;">
+                <tr>
+                  <td width="36" valign="top" style="padding-right: 12px; font-size: 22px; line-height: 1.2;">
+                    ⚠️
+                  </td>
+                  <td valign="top">
+                    <div style="font-size: 13.5px; font-weight: 700; color: #111111; margin-bottom: 3px;">
+                      Important
+                    </div>
+                    <div style="font-size: 12.5px; color: #444444; line-height: 1.45;">
+                      The problem statements will be revealed only at the start of the hackathon. All projects must be built during the 24 hours, and pre-built projects are not allowed.
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 8. WHATSAPP SECTION (ONLY SECTION WITH COLOR ACCENT) -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 20px 24px; text-align: center; margin-bottom: 20px;">
+                <tr>
+                  <td align="center">
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 6px auto;">
+                      <tr>
+                        <td style="font-size: 28px; line-height: 1; padding-right: 8px; vertical-align: middle;">
+                          💬
+                        </td>
+                        <td style="font-size: 16px; font-weight: 800; color: #166534; vertical-align: middle;">
+                          Official WhatsApp Group
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="font-size: 13px; color: #15803d; margin-bottom: 16px; line-height: 1.4;">
+                      Join the official WhatsApp group now to receive all important announcements and updates.
+                    </div>
+                    <div>
+                      <a href="https://chat.whatsapp.com/J4GVC6UgtX37ioBMVsRoYa" target="_blank" style="display: inline-block; background-color: #16a34a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13.5px; padding: 11px 22px; border-radius: 6px; letter-spacing: 0.3px;">
+                        JOIN OFFICIAL WHATSAPP GROUP ↗
+                      </a>
+                    </div>
+                    <div style="font-size: 12px; color: #166534; margin-top: 10px; font-weight: 500;">
+                      All updates will be shared there.
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 9. GUIDE MESSAGE -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f7f7f7; border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px 14px; margin-bottom: 22px;">
+                <tr>
+                  <td width="28" valign="middle" style="font-size: 16px; line-height: 1; padding-right: 8px;">
+                    📄
+                  </td>
+                  <td valign="middle" style="font-size: 12.5px; color: #444444; line-height: 1.4;">
+                    A detailed guide with the schedule and rules will be sent to you before the event.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 10. NEED HELP? -->
+              <div style="font-size: 13.5px; font-weight: 800; color: #111111; margin-bottom: 6px;">
+                Need Help?
+              </div>
+              <div style="font-size: 13px; color: #333333; line-height: 1.6; margin-bottom: 18px;">
+                For any queries, contact:<br>
+                <strong>Jeevanandh</strong> &nbsp;|&nbsp; 📞 <a href="tel:+916381206466" style="color: #111111; text-decoration: underline; font-weight: 600;">+91 63812 06466</a> &nbsp;|&nbsp; ✉️ <a href="mailto:sakthihackfest@gmail.com" style="color: #111111; text-decoration: underline; font-weight: 600;">sakthihackfest@gmail.com</a>
               </div>
 
-              <!-- Event Details Box -->
-              <div style="margin-bottom: 26px; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; padding: 20px;">
-                <div style="font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: #dc2626; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #e4e4e7; padding-bottom: 8px;">
-                  Event details
-                </div>
-                <table role="presentation" width="100%" style="border-collapse: collapse; font-size: 14px; line-height: 1.65;">
-                  <tr>
-                    <td style="padding: 6px 0; color: #71717a; width: 30%; font-weight: 600;">Dates:</td>
-                    <td style="padding: 6px 0; color: #09090b; font-weight: 700;">10-11 October 2026</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 6px 0; color: #71717a; font-weight: 600; vertical-align: top;">Reporting:</td>
-                    <td style="padding: 6px 0; color: #09090b;">9:00 AM, 10 October, at the Sree Sakthi Engineering College</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 6px 0; color: #71717a; font-weight: 600; vertical-align: top;">Venue:</td>
-                    <td style="padding: 6px 0; color: #09090b;">Sree Sakthi Engineering College, Karamadai.</td>
-                  </tr>
-                </table>
+              <!-- 11. SIGN-OFF -->
+              <div style="font-size: 13.5px; color: #333333; line-height: 1.5; margin-bottom: 22px;">
+                Regards,<br>
+                <strong style="color: #111111;">Team Sakthi HackFest'26</strong><br>
+                Sree Sakthi Engineering College
               </div>
 
-              <!-- Domains Box -->
-              <div style="margin-bottom: 26px; background-color: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 20px;">
-                <div style="font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: #dc2626; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #e4e4e7; padding-bottom: 8px;">
-                  Domains
-                </div>
-                <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #27272a; line-height: 1.85;">
-                  <li><strong>Generative AI</strong></li>
-                  <li><strong>Cryptography and Cyber Security</strong></li>
-                  <li><strong>Sustainable Development Goals</strong></li>
-                  <li><strong>Digital Prototyping &amp; Design</strong></li>
-                  <li><strong>Web3 &amp; FinTech</strong></li>
-                </ul>
-              </div>
+              <!-- 12. FOOTER -->
+              <div style="border-top: 1px solid #dddddd; margin-bottom: 14px;"></div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td valign="top" style="font-size: 11px; color: #555555; line-height: 1.4;">
+                    <strong style="color: #222222; font-size: 11.5px; letter-spacing: 0.4px;">SAKTHI HACKFEST '26</strong><br>
+                    Sree Sakthi Engineering College, Karamadai, Coimbatore – 641104
+                  </td>
+                  <td valign="top" align="right" style="font-size: 10px; color: #777777; line-height: 1.35;">
+                    This automated registration acknowledgement<br>
+                    was sent only to the registered Team Leader.
+                  </td>
+                </tr>
+              </table>
 
-              <p style="margin: 0 0 26px 0; font-size: 14px; line-height: 1.65; color: #52525b;">
-                The problem statements will be revealed only at the start of the hackathon. All projects must be built during the 24 hours, and pre-built projects are not allowed.
-              </p>
-
-              <!-- WhatsApp CTA Card -->
-              <div style="text-align: center; margin: 32px 0 28px 0; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 24px 20px;">
-                <p style="font-size: 15px; font-weight: 700; color: #14532d; margin: 0 0 16px 0;">
-                  Join the official WhatsApp group now:
-                </p>
-                <div>
-                  <a href="https://chat.whatsapp.com/J4GVC6UgtX37ioBMVsRoYa" target="_blank" style="display: inline-block; background-color: #25D366; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14.5px; letter-spacing: 0.5px; padding: 14px 28px; border-radius: 8px; box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);">
-                    JOIN OFFICIAL WHATSAPP GROUP
-                  </a>
-                </div>
-                <p style="font-size: 12px; color: #166534; margin: 12px 0 4px 0; word-break: break-all;">
-                  <a href="https://chat.whatsapp.com/J4GVC6UgtX37ioBMVsRoYa" target="_blank" style="color: #166534; text-decoration: underline;">https://chat.whatsapp.com/J4GVC6UgtX37ioBMVsRoYa</a>
-                </p>
-                <p style="font-size: 13px; color: #15803d; font-weight: 600; margin: 6px 0 0 0;">
-                  All updates will be shared there.
-                </p>
-              </div>
-
-              <div style="margin: 22px 0; padding: 14px 16px; background-color: #f4f4f5; border-radius: 8px; font-size: 13.5px; color: #52525b; line-height: 1.55;">
-                A detailed guide with the schedule and rules will be sent to you before the event.
-              </div>
-
-              <p style="margin: 0 0 20px 0; font-size: 14px; color: #3f3f46; line-height: 1.6;">
-                For any queries, contact Jeevanandh at <strong>+91 63812 06466</strong>.
-              </p>
-
-              <p style="margin: 0; font-size: 14px; color: #18181b; line-height: 1.6;">
-                Regards,<br/>
-                <strong>Team Sakthi HackFest'26</strong><br/>
-                <a href="mailto:sakthihackfest@gmail.com" style="color: #dc2626; text-decoration: none; font-weight: 600;">sakthihackfest@gmail.com</a>
-              </p>
             </td>
           </tr>
-
-          <!-- Footer Area -->
-          <tr>
-            <td style="background-color: #0b0c10; padding: 22px 32px; text-align: center; border-top: 1px solid #27272a;">
-              <div style="font-size: 12px; font-weight: 700; color: #f4f4f5; letter-spacing: 1px;">
-                SAKTHI HACKFEST '26
-              </div>
-              <div style="font-size: 11px; color: #a1a1aa; margin-top: 4px;">
-                Sree Sakthi Engineering College, Karamadai, Coimbatore - 641104
-              </div>
-              <div style="font-size: 11px; color: #71717a; margin-top: 8px;">
-                This automated registration acknowledgment was sent only to the registered Team Leader.
-              </div>
-            </td>
-          </tr>
-
         </table>
       </td>
     </tr>
   </table>
 </body>
-</html>
-  `;
+</html>`;
 }
 
 function escapeHtml(text) {
@@ -1146,6 +1190,8 @@ function handleRetryEmail(registrationId) {
         teamSize: teamSize,
         teamMemberNames: teamMemberNames,
         theme: headerCols["selectedtheme"] ? data[i][headerCols["selectedtheme"] - 1] : data[i][4],
+        selectedDomain: headerCols["selecteddomain"] ? data[i][headerCols["selecteddomain"] - 1] : "",
+        accommodationRequired: headerCols["accommodationrequired"] ? data[i][headerCols["accommodationrequired"] - 1] : "No",
         leaderName: leaderName,
         leaderDept: headerCols["teamleaderdepartment"] ? data[i][headerCols["teamleaderdepartment"] - 1] : data[i][6],
         leaderYear: headerCols["teamleaderyear"] ? data[i][headerCols["teamleaderyear"] - 1] : data[i][7],
