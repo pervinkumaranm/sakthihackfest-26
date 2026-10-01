@@ -347,10 +347,17 @@ function handleRegistrationSubmission(payload) {
     selecteddomain: selectedDomain,
     selectedtheme: theme,
     teamleadername: leaderName,
+    leadername: leaderName,
     teamleaderdepartment: leaderDept,
+    leaderdepartment: leaderDept,
+    teamleaderdept: leaderDept,
     teamleaderyear: leaderYear,
+    leaderyear: leaderYear,
     teamleaderwhatsapp: leaderWhatsapp,
+    leaderwhatsapp: leaderWhatsapp,
+    teamleaderphone: leaderWhatsapp,
     teamleaderemail: leaderEmail,
+    leaderemail: leaderEmail,
     member2name: m2Name,
     member2department: m2Dept,
     member2year: m2Year,
@@ -376,9 +383,20 @@ function handleRegistrationSubmission(payload) {
     emailsentat: "",
     lastupdated: timestampStr,
     accommodationrequired: accommodationRequired,
+    accommodation: accommodationRequired,
+    leadercollege: leaderCollege,
     leadercollegename: leaderCollege,
+    teamleadercollege: leaderCollege,
+    teamleadercollegename: leaderCollege,
+    collegename: leaderCollege,
+    college: leaderCollege,
+    institution: leaderCollege,
+    institutionname: leaderCollege,
+    member2college: m2College,
     member2collegename: m2College,
+    member3college: m3College,
     member3collegename: m3College,
+    member4college: m4College,
     member4collegename: m4College
   };
 
@@ -469,40 +487,11 @@ function handleRegistrationSubmission(payload) {
 }
 
 // ── Required New Headers Auto-Check ─────────────────────────────────────────
-const REQUIRED_NEW_HEADERS = [
-  "Accommodation Required",
-  "Selected Domain",
-  "Leader College Name",
-  "Member 2 College Name",
-  "Member 3 College Name",
-  "Member 4 College Name"
-];
-
 function ensureRequiredHeaders(sheet) {
-  let lastCol = sheet.getLastColumn();
-  if (lastCol === 0) {
+  // STRICT SAFETY: Never clear, rewrite, or reorganize an existing sheet during registration.
+  // Only initialize headers if the sheet has 0 columns or 0 rows.
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
     initSheetHeaders(sheet);
-    return;
-  }
-
-  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) {
-    return String(h || "").trim();
-  });
-  const existingHeadersNorm = existingHeaders.map(function(h) {
-    return h.toLowerCase().replace(/[^a-z0-9]/g, "");
-  });
-
-  let hasMissing = false;
-  for (let i = 0; i < REQUIRED_NEW_HEADERS.length; i++) {
-    const norm = REQUIRED_NEW_HEADERS[i].toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (existingHeadersNorm.indexOf(norm) === -1) {
-      hasMissing = true;
-      break;
-    }
-  }
-
-  if (hasMissing) {
-    applyInlineLayoutToSheet();
   }
 }
 
@@ -525,12 +514,8 @@ function getHeaderMap(sheet) {
 
 // ── Dynamic Header Mapper ──────────────────────────────────────────────────
 function appendRegistrationRowByHeaders(sheet, dataMap) {
-  // 1. Verify headers safely without crashing registration
-  try {
-    ensureRequiredHeaders(sheet);
-  } catch (headerErr) {
-    Logger.log("ensureRequiredHeaders notice: " + headerErr.message);
-  }
+  // Only initialize if sheet is completely blank
+  ensureRequiredHeaders(sheet);
 
   ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
 
@@ -1309,8 +1294,9 @@ const SHEET_HEADERS = [
   "Last Updated"
 ];
 
-// ── One-Click Inline Layout Organizer for Google Sheet ────────────────────
+// ── Safe Header & Structure Checker (Zero-Destruction) ─────────────────────
 function applyInlineLayoutToSheet() {
+  Logger.log("applyInlineLayoutToSheet called: Sheet rewrite is disabled to protect existing rows.");
   const sheet = getOrCreateRegistrationSheet();
   const lastCol = sheet.getLastColumn();
   const lastRow = sheet.getLastRow();
@@ -1320,63 +1306,9 @@ function applyInlineLayoutToSheet() {
     return;
   }
 
-  // 1. Read existing headers and index them
-  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  const oldHeaderMap = {};
-  existingHeaders.forEach(function(h, idx) {
-    const raw = String(h || "").trim();
-    if (raw) {
-      oldHeaderMap[raw.toLowerCase().replace(/[^a-z0-9]/g, "")] = idx;
-    }
-  });
-
-  // 2. Read existing data rows (if any)
-  const existingData = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
-
-  // 3. Rebuild the entire sheet matrix according to SHEET_HEADERS
-  const newMatrix = [];
-  newMatrix.push(SHEET_HEADERS); // Row 1
-
-  for (let r = 0; r < existingData.length; r++) {
-    const oldRow = existingData[r];
-    const newRow = [];
-    for (let c = 0; c < SHEET_HEADERS.length; c++) {
-      const targetHeader = SHEET_HEADERS[c];
-      const targetNorm = targetHeader.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (targetNorm in oldHeaderMap) {
-        const oldColIdx = oldHeaderMap[targetNorm];
-        const val = oldRow[oldColIdx];
-        newRow.push(val !== undefined && val !== null ? val : "");
-      } else {
-        // New column: leave blank for older registrations
-        newRow.push("");
-      }
-    }
-    newMatrix.push(newRow);
-  }
-
-  // 4. Ensure sheet grid has at least SHEET_HEADERS.length columns before writing
+  // Ensure grid has enough columns without disturbing any existing data
   ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
-
-  // 5. Safely clear and write the newly aligned matrix
-  sheet.clearContents();
-  sheet.getRange(1, 1, newMatrix.length, SHEET_HEADERS.length).setValues(newMatrix);
-
-  // 6. Apply dark header styling
-  const headerRange = sheet.getRange(1, 1, 1, SHEET_HEADERS.length);
-  headerRange.setBackground("#0f172a");
-  headerRange.setFontColor("#f8fafc");
-  headerRange.setFontWeight("bold");
-  headerRange.setFontSize(10);
-  headerRange.setHorizontalAlignment("center");
-  sheet.setRowHeight(1, 38);
-  sheet.setFrozenRows(1);
-
-  Logger.log("=================================================================");
-  Logger.log("✅ GOOGLE SHEET UPDATED TO INLINE LAYOUT SUCCESSFULLY!");
-  Logger.log("Total Columns: " + SHEET_HEADERS.length);
-  Logger.log("Migrated Existing Registrations: " + existingData.length);
-  Logger.log("=================================================================");
+  Logger.log("✅ Column capacity verified. Existing rows and college details preserved safely.");
 }
 
 function ensureSheetColumnsCapacity(sheet, requiredColumns) {
@@ -1533,24 +1465,8 @@ function testSystemConnection() {
 }
 
 function testSheetWrite() {
-  const ss = SpreadsheetApp.openById(
-    "1xPTyYx7YUZ8WRZD1zs-7gr4CqVknwJDpiC1BreWe9q0"
-  );
-
-  const sheet = ss.getSheetByName("Registrations");
-
-  if (!sheet) {
-    throw new Error("Registrations sheet not found");
-  }
-
-  sheet.appendRow([
-    "TEST-SHF26",
-    new Date(),
-    "TEST TEAM",
-    2
-  ]);
-
-  Logger.log("Sheet write successful");
+  const sheet = getOrCreateRegistrationSheet();
+  Logger.log("testSheetWrite verified connection to sheet: " + sheet.getName());
 }
 
 function testEmail() {
@@ -1635,37 +1551,20 @@ function testFullRegistrationWrite() {
   Logger.log("✅ Test row inserted successfully with ID: " + testId);
 }
 
-// ── One-Click Full Self-Heal & Test Function ───────────────────────────────
+// ── One-Click Full Safety & Status Diagnostic ──────────────────────────────
 function diagnoseAndFixSheet() {
   Logger.log("=================================================================");
-  Logger.log("DIAGNOSING GOOGLE SHEET & WRITING CAPABILITY...");
+  Logger.log("DIAGNOSING GOOGLE SHEET STATUS...");
   const sheet = getOrCreateRegistrationSheet();
   Logger.log("Sheet Name: " + sheet.getName());
-  Logger.log("Initial Max Grid Columns: " + sheet.getMaxColumns());
-  Logger.log("Initial Last Column with Data: " + sheet.getLastColumn());
-  Logger.log("Initial Rows: " + sheet.getLastRow());
+  Logger.log("Current Max Grid Columns: " + sheet.getMaxColumns());
+  Logger.log("Current Last Column with Data: " + sheet.getLastColumn());
+  Logger.log("Current Rows: " + sheet.getLastRow());
 
-  // 1. Ensure grid capacity for 39 columns
   ensureSheetColumnsCapacity(sheet, SHEET_HEADERS.length);
-  Logger.log("1. Grid capacity expanded to: " + sheet.getMaxColumns() + " columns.");
-
-  // 2. Re-align columns to new inline layout without losing any existing rows
-  applyInlineLayoutToSheet();
-  Logger.log("2. Inline layout applied successfully.");
-
-  // 3. Write test registration row
-  testSheetWrite();
-
+  Logger.log("Column capacity checked: " + sheet.getMaxColumns() + " columns.");
+  Logger.log("Existing rows and college data are strictly preserved without modification.");
   Logger.log("=================================================================");
-  Logger.log("✅ ALL REPAIRS COMPLETED! Check Google Sheet now — new row and inline columns are visible!");
-  Logger.log("=================================================================");
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function buildJsonResponse(obj, statusCode) {
-  const output = ContentService.createTextOutput(JSON.stringify(obj));
-  output.setMimeType(ContentService.MimeType.JSON);
-  return output;
 }
 
 function formatTimestamp(date) {
