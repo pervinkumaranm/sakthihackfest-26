@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
-import { CheckCircle2, Circle, Clock, MapPin } from 'lucide-react'
-import { EVENT_CONFIG } from '../../config/event'
+import { CheckCircle2, Circle, Clock, MapPin, Lock } from 'lucide-react'
+import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/event'
 
 export default function Timeline() {
   const ref = useRef<HTMLDivElement>(null)
@@ -37,10 +37,28 @@ export default function Timeline() {
 
           <div className="space-y-3">
             {EVENT_CONFIG.timeline.map((item, i) => {
-              const isCompleted = item.status === 'completed'
-              const isActive = item.status === 'active'
+              // Target STRICTLY the Registration Closes card (t2) only; leave Registration Opening (t1) completely untouched
+              const isRegistrationCloseCard = item.id === 't2' || item.stage.toUpperCase().includes('REGISTRATION CLOSE')
+              const isRegClosed = isRegistrationCloseCard && IS_REGISTRATION_CLOSED
+
+              const isCompleted = item.status === 'completed' || isRegClosed
+              const isActive = item.status === 'active' && !isRegClosed
               const isReporting = item.stage === 'REPORTING'
-              const IconEl = isCompleted ? CheckCircle2 : isActive ? Clock : isReporting ? MapPin : Circle
+              const IconEl = isRegClosed ? Lock : isCompleted ? CheckCircle2 : isActive ? Clock : isReporting ? MapPin : Circle
+
+              const displayStage = isRegClosed ? 'REGISTRATION CLOSED' : item.stage
+              const displayDate = isRegClosed ? (
+                <span className="text-red-400 font-bold">
+                  REGISTRATION CLOSED <span className="text-brand-muted font-normal">· CAPACITY REACHED</span>
+                </span>
+              ) : (
+                <>
+                  {item.date} <span className="text-brand-muted">· {item.time}</span>
+                </>
+              )
+              const displayDescription = isRegClosed
+                ? 'Registrations are officially closed as all 60 team slots have been filled.'
+                : item.description
 
               return (
                 <motion.div
@@ -52,7 +70,9 @@ export default function Timeline() {
                 >
                   {/* Icon node */}
                   <div className={`absolute left-0 sm:left-0 top-4 flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-none border ${
-                    isCompleted
+                    isRegClosed
+                      ? 'border-red-500/50 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+                      : isCompleted
                       ? 'border-green-500/50 bg-green-500/10'
                       : isActive
                       ? 'border-brand-primary bg-brand-primary/15 shadow-glow-red'
@@ -62,13 +82,15 @@ export default function Timeline() {
                   }`}>
                     <IconEl
                       size={20}
-                      className={isCompleted ? 'text-green-500' : isActive ? 'text-brand-primary' : isReporting ? 'text-brand-primary' : 'text-brand-mutedDark'}
+                      className={isRegClosed ? 'text-red-400' : isCompleted ? 'text-green-500' : isActive ? 'text-brand-primary' : isReporting ? 'text-brand-primary' : 'text-brand-mutedDark'}
                     />
                   </div>
 
                   {/* Content */}
                   <div className={`p-5 border transition-all duration-300 ${
-                    isActive
+                    isRegClosed
+                      ? 'border-red-500/40 bg-red-500/5'
+                      : isActive
                       ? 'border-brand-primary/50 bg-brand-primary/5'
                       : isCompleted
                       ? 'border-brand-border bg-brand-surface/50 opacity-70'
@@ -76,18 +98,21 @@ export default function Timeline() {
                   }`}>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2">
-                        {isActive && (
-                          <span className="font-mono text-[10px] px-2 py-0.5 bg-brand-primary text-white tracking-widest">ACTIVE</span>
+                        {isRegClosed && (
+                          <span className="font-mono text-[10px] px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/40 tracking-widest font-bold">CLOSED</span>
+                        )}
+                        {!isRegClosed && isActive && (
+                          <span className="font-mono text-[10px] px-2 py-0.5 bg-brand-primary text-white tracking-widest font-bold">ACTIVE</span>
                         )}
                         <h3 className="font-display font-bold text-sm sm:text-base text-white tracking-wide">
-                          {item.stage}
+                          {displayStage}
                         </h3>
                       </div>
                       <div className="font-mono text-xs text-brand-primary">
-                        {item.date} <span className="text-brand-muted">· {item.time}</span>
+                        {displayDate}
                       </div>
                     </div>
-                    <p className="text-brand-muted text-sm leading-relaxed">{item.description}</p>
+                    <p className="text-brand-muted text-sm leading-relaxed">{displayDescription}</p>
                   </div>
                 </motion.div>
               )

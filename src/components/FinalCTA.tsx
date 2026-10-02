@@ -1,8 +1,9 @@
 import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import { EVENT_CONFIG } from '../../config/event'
+import { ArrowRight, Lock } from 'lucide-react'
+import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/event'
+import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 export default function FinalCTA() {
   const ref = useRef<HTMLDivElement>(null)
@@ -40,18 +41,38 @@ export default function FinalCTA() {
             animate={inView ? { opacity: 1, scale: 1 } : {}}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            <Link
-              to="/register"
-              className="group inline-flex items-center gap-4 bg-brand-primary text-white font-display font-black text-xl tracking-widest px-12 py-6 cyber-cut-corner hover:shadow-glow-red transition-all duration-300"
-            >
-              REGISTER NOW
-              <ArrowRight size={22} className="group-hover:translate-x-2 transition-transform" />
-            </Link>
+            {IS_REGISTRATION_CLOSED ? (
+              <button
+                type="button"
+                onClick={openRegistrationClosedModal}
+                className="group inline-flex items-center gap-4 bg-brand-primary text-white font-display font-black text-xl tracking-widest px-12 py-6 cyber-cut-corner hover:shadow-glow-red transition-all duration-300 cursor-pointer"
+              >
+                REGISTRATION CLOSED
+                <Lock size={22} className="text-white/80" />
+              </button>
+            ) : (
+              <Link
+                to="/register"
+                className="group inline-flex items-center gap-4 bg-brand-primary text-white font-display font-black text-xl tracking-widest px-12 py-6 cyber-cut-corner hover:shadow-glow-red transition-all duration-300"
+              >
+                REGISTER NOW
+                <ArrowRight size={22} className="group-hover:translate-x-2 transition-transform" />
+              </Link>
+            )}
           </motion.div>
 
           <p className="mt-6 font-mono text-sm text-brand-muted">
-            Registration closes {EVENT_CONFIG.dates.registrationDeadline} · {' '}
-            <span className="text-white">2 to 4 members · ₹1,000 per team</span>
+            {IS_REGISTRATION_CLOSED ? (
+              <>
+                <span className="text-red-400 font-bold">Registration Closed</span> ·{' '}
+                <span className="text-white">Capacity Reached (60/60 Teams Filled)</span>
+              </>
+            ) : (
+              <>
+                Registration closes {EVENT_CONFIG.dates.registrationDeadline} ·{' '}
+                <span className="text-white">2 to 4 members · ₹1,000 per team</span>
+              </>
+            )}
           </p>
         </motion.div>
       </div>

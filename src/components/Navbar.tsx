@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Shield } from 'lucide-react'
+import { IS_REGISTRATION_CLOSED } from '../../config/event'
+import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 const navLinks = [
   { label: 'EVENT', href: '/#event' },
@@ -116,12 +118,22 @@ export default function Navbar() {
 
             {/* CTA + Hamburger */}
             <div className="flex items-center gap-2.5">
-              <Link
-                to="/register"
-                className="hidden sm:flex items-center gap-2 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs tracking-[0.15em] px-5 py-2.5 rounded-lg shadow-[0_0_20px_rgba(255,59,48,0.4)] transition-all duration-200 uppercase"
-              >
-                REGISTER NOW
-              </Link>
+              {IS_REGISTRATION_CLOSED ? (
+                <button
+                  type="button"
+                  onClick={openRegistrationClosedModal}
+                  className="hidden sm:flex items-center gap-2 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs tracking-[0.15em] px-5 py-2.5 rounded-lg shadow-[0_0_20px_rgba(255,59,48,0.4)] transition-all duration-200 uppercase cursor-pointer"
+                >
+                  REGISTRATION CLOSED
+                </button>
+              ) : (
+                <Link
+                  to="/register"
+                  className="hidden sm:flex items-center gap-2 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs tracking-[0.15em] px-5 py-2.5 rounded-lg shadow-[0_0_20px_rgba(255,59,48,0.4)] transition-all duration-200 uppercase"
+                >
+                  REGISTER NOW
+                </Link>
+              )}
 
               <button
                 onClick={() => setMobileOpen(!mobileOpen)}
@@ -188,13 +200,26 @@ export default function Navbar() {
               transition={{ delay: 0.35 }}
               className="mt-8"
             >
-              <Link
-                to="/register"
-                onClick={() => setMobileOpen(false)}
-                className="block w-full text-center bg-brand-primary text-white font-display font-bold text-lg tracking-widest py-4 cyber-cut-corner"
-              >
-                REGISTER NOW →
-              </Link>
+              {IS_REGISTRATION_CLOSED ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false)
+                    openRegistrationClosedModal()
+                  }}
+                  className="block w-full text-center bg-brand-primary text-white font-display font-bold text-lg tracking-widest py-4 cyber-cut-corner cursor-pointer"
+                >
+                  REGISTRATION CLOSED
+                </button>
+              ) : (
+                <Link
+                  to="/register"
+                  onClick={() => setMobileOpen(false)}
+                  className="block w-full text-center bg-brand-primary text-white font-display font-bold text-lg tracking-widest py-4 cyber-cut-corner"
+                >
+                  REGISTER NOW →
+                </Link>
+              )}
             </motion.div>
           </motion.div>
         )}

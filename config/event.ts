@@ -113,6 +113,13 @@ export interface EventConfig {
   };
 }
 
+/**
+ * Temporary Registration Status Flag (UI Level)
+ * When true, registrations are temporarily closed at the UI level (buttons say REGISTRATION CLOSED and open modal).
+ * When reopening registrations, simply set this to false.
+ */
+export const IS_REGISTRATION_CLOSED = true;
+
 export const EVENT_CONFIG: EventConfig = {
   eventName: "SAKTHI HACKFEST'26",
   shortName: "SHF'26",

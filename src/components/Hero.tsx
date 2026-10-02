@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowRight, ChevronDown, Shield } from 'lucide-react'
+import { ArrowRight, ChevronDown, Shield, Lock } from 'lucide-react'
 import EventCountdown from './EventCountdown'
+import { IS_REGISTRATION_CLOSED } from '../../config/event'
+import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 export default function Hero() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -197,12 +199,22 @@ export default function Hero() {
           className="flex flex-col items-center gap-3 mt-2 mb-8 w-full max-w-xs sm:max-w-sm"
         >
           {/* Primary Button: Red cyber-cut pill */}
-          <Link
-            to="/register"
-            className="w-full group flex items-center justify-center gap-2.5 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs sm:text-sm tracking-[0.2em] py-4 px-8 rounded-lg shadow-[0_0_28px_rgba(255,59,48,0.45)] hover:shadow-[0_0_36px_rgba(255,59,48,0.65)] transition-all duration-200 uppercase hover:scale-[1.02]"
-          >
-            REGISTER NOW <ArrowRight size={17} className="group-hover:translate-x-1 transition-transform" />
-          </Link>
+          {IS_REGISTRATION_CLOSED ? (
+            <button
+              type="button"
+              onClick={openRegistrationClosedModal}
+              className="w-full group flex items-center justify-center gap-2.5 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs sm:text-sm tracking-[0.2em] py-4 px-8 rounded-lg shadow-[0_0_28px_rgba(255,59,48,0.45)] hover:shadow-[0_0_36px_rgba(255,59,48,0.65)] transition-all duration-200 uppercase hover:scale-[1.02] cursor-pointer"
+            >
+              REGISTRATION CLOSED <Lock size={17} className="text-white/80" />
+            </button>
+          ) : (
+            <Link
+              to="/register"
+              className="w-full group flex items-center justify-center gap-2.5 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs sm:text-sm tracking-[0.2em] py-4 px-8 rounded-lg shadow-[0_0_28px_rgba(255,59,48,0.45)] hover:shadow-[0_0_36px_rgba(255,59,48,0.65)] transition-all duration-200 uppercase hover:scale-[1.02]"
+            >
+              REGISTER NOW <ArrowRight size={17} className="group-hover:translate-x-1 transition-transform" />
+            </Link>
+          )}
 
           {/* Secondary Button: Outlined box */}
           <button
