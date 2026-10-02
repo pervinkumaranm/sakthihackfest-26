@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { Globe, Mail, Phone, MapPin } from 'lucide-react'
 import { InstagramIcon } from './SocialIcons'
-import { EVENT_CONFIG } from '../../config/event'
+import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/event'
+import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 export default function Footer() {
   const year = 2026
@@ -74,17 +75,38 @@ export default function Footer() {
                 { label: 'Rules', href: '/rules' },
                 { label: 'FAQ', href: '/faq' },
                 { label: 'Contact', href: '/contact' },
-              ].map(link => (
-                <li key={link.label}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-brand-muted hover:text-white transition-colors duration-200 flex items-center gap-2 group"
-                  >
-                    <span className="w-3 h-px bg-brand-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
+              ].map(link => {
+                const isRegisterLink = link.label === 'Register'
+                if (isRegisterLink && IS_REGISTRATION_CLOSED) {
+                  return (
+                    <li key={link.label}>
+                      <button
+                        type="button"
+                        onClick={openRegistrationClosedModal}
+                        className="text-sm text-brand-muted hover:text-white transition-colors duration-200 flex items-center gap-2 group cursor-pointer text-left"
+                      >
+                        <span className="w-3 h-px bg-brand-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
+                        {link.label}
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-red-500/15 text-red-400 border border-red-500/30 rounded font-semibold tracking-wide">
+                          CLOSED
+                        </span>
+                      </button>
+                    </li>
+                  )
+                }
+
+                return (
+                  <li key={link.label}>
+                    <Link
+                      to={link.href}
+                      className="text-sm text-brand-muted hover:text-white transition-colors duration-200 flex items-center gap-2 group"
+                    >
+                      <span className="w-3 h-px bg-brand-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
+                      {link.label}
+                    </Link>
+                  </li>
+                )
+              })}
             </ul>
           </div>
 
