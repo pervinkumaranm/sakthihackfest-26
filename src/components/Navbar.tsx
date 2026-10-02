@@ -61,11 +61,10 @@ export default function Navbar() {
         initial={{ y: -80 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
-          scrolled
-            ? 'bg-brand-bg/85 backdrop-blur-xl border-b border-brand-border'
-            : 'bg-transparent'
-        }`}
+        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${scrolled
+          ? 'bg-brand-bg/85 backdrop-blur-xl border-b border-brand-border'
+          : 'bg-transparent'
+          }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
@@ -74,7 +73,7 @@ export default function Navbar() {
               <img
                 src="/college-banner.jpg"
                 alt="Sree Sakthi Engineering College"
-                className="h-9 sm:h-11 w-auto object-contain rounded transition-transform duration-200 group-hover:scale-105"
+                className="h-16 sm:h-20 w-auto object-contain rounded transition-transform duration-200 group-hover:scale-105"
               />
               <div className="hidden sm:block border-l border-brand-border/80 pl-3.5">
                 <span className="font-display font-black text-sm sm:text-base md:text-lg tracking-wider text-[#FF9500] group-hover:text-brand-primary transition-colors block leading-tight">
