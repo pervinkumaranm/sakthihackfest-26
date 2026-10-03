@@ -9,7 +9,7 @@ import {
   Users, Phone, Mail, FileText, ArrowRight, User,
   Sparkles, Globe, Palette, Coins, Lock, X
 } from 'lucide-react'
-import { EVENT_CONFIG } from '../../config/eventConfig'
+import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/eventConfig'
 import { registrationFormSchema, RegistrationFormValues, ACADEMIC_YEARS } from '../../config/registrationSchema'
 import { apiService } from '../services/api'
 
@@ -49,9 +49,9 @@ export default function Register() {
   const [screenshotFileName, setScreenshotFileName] = useState('')
   const [screenshotError, setScreenshotError] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [isRegistrationClosed, setIsRegistrationClosed] = useState(false)
+  const [isRegistrationClosed, setIsRegistrationClosed] = useState(IS_REGISTRATION_CLOSED)
   const [registeredCount, setRegisteredCount] = useState<number | null>(null)
-  const [showClosedModal, setShowClosedModal] = useState(false)
+  const [showClosedModal, setShowClosedModal] = useState(IS_REGISTRATION_CLOSED)
   const [checkingStatus, setCheckingStatus] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -126,9 +126,13 @@ export default function Register() {
           if (typeof status.count === 'number') {
             setRegisteredCount(status.count)
           }
-          if (status.isRegistrationClosed || status.count >= 60) {
+          // IS_REGISTRATION_CLOSED is the master authority for closing registration
+          if (IS_REGISTRATION_CLOSED) {
             setIsRegistrationClosed(true)
             setShowClosedModal(true)
+          } else {
+            setIsRegistrationClosed(false)
+            setShowClosedModal(false)
           }
         }
       } catch (err) {
@@ -235,8 +239,9 @@ export default function Register() {
     // Prevent double submission
     if (submitting) return
 
-    // Strict 60-team registration limit guard
-    if (isRegistrationClosed) {
+    // Strict registration limit guard governed by IS_REGISTRATION_CLOSED toggle
+    if (IS_REGISTRATION_CLOSED) {
+      setIsRegistrationClosed(true)
       setShowClosedModal(true)
       return
     }
@@ -296,7 +301,7 @@ export default function Register() {
           response?.error?.includes('limit of 60') ||
           response?.error?.includes('Registration Closed')
 
-        if (isClosed) {
+        if (isClosed && IS_REGISTRATION_CLOSED) {
           setIsRegistrationClosed(true)
           setShowClosedModal(true)
         }
@@ -309,7 +314,7 @@ export default function Register() {
       const isClosed =
         err?.message?.includes('limit of 60') ||
         err?.message?.includes('Registration Closed')
-      if (isClosed) {
+      if (isClosed && IS_REGISTRATION_CLOSED) {
         setIsRegistrationClosed(true)
         setShowClosedModal(true)
       }

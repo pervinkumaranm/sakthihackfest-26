@@ -7,6 +7,7 @@
 
 import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus } from '../types'
 import * as XLSX from 'xlsx'
+import { IS_REGISTRATION_CLOSED } from '../../config/event'
 
 const STORAGE_KEY = 'shf26_registrations_v3'
 
@@ -159,8 +160,8 @@ export const apiService = {
           result.message?.includes('Registration Closed')
         return {
           success: false,
-          errorCode: isClosed ? 'REGISTRATION_CLOSED' : (result.errorCode || 'REGISTRATION_FAILED'),
-          error: isClosed
+          errorCode: (isClosed && IS_REGISTRATION_CLOSED) ? 'REGISTRATION_CLOSED' : (result.errorCode || 'REGISTRATION_FAILED'),
+          error: (isClosed && IS_REGISTRATION_CLOSED)
             ? 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
             : getFriendlyErrorMessage(result.errorCode, result.message),
         }
@@ -239,7 +240,7 @@ export const apiService = {
             success: true,
             count: data.count,
             limit: data.limit || 60,
-            isRegistrationClosed: Boolean(data.isRegistrationClosed || data.count >= (data.limit || 60)),
+            isRegistrationClosed: IS_REGISTRATION_CLOSED,
             message: data.message,
           }
         }
@@ -260,7 +261,7 @@ export const apiService = {
             success: true,
             count: data.count,
             limit: data.limit || 60,
-            isRegistrationClosed: Boolean(data.isRegistrationClosed || data.count >= (data.limit || 60)),
+            isRegistrationClosed: IS_REGISTRATION_CLOSED,
             message: data.message,
           }
         }
@@ -271,7 +272,7 @@ export const apiService = {
       success: false,
       count: 0,
       limit: 60,
-      isRegistrationClosed: false,
+      isRegistrationClosed: IS_REGISTRATION_CLOSED,
     }
   },
 

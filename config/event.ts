@@ -118,7 +118,7 @@ export interface EventConfig {
  * When true, registrations are temporarily closed at the UI level (buttons say REGISTRATION CLOSED and open modal).
  * When reopening registrations, simply set this to false.
  */
-export const IS_REGISTRATION_CLOSED = true;
+export const IS_REGISTRATION_CLOSED = false;
 
 export const EVENT_CONFIG: EventConfig = {
   eventName: "SAKTHI HACKFEST'26",

@@ -17,6 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
+import { IS_REGISTRATION_CLOSED } from '../config/event';
 
 export const config = {
   maxDuration: 60,
@@ -890,10 +891,10 @@ async function processRegistration(rawPayload: any) {
     };
   }
 
-  // Enforce Atomic 60-team registration limit strictly
+  // Enforce Atomic 60-team registration limit strictly when IS_REGISTRATION_CLOSED is true
   const currentRegisteredCount = getSuccessfullyRegisteredCount(existingRows, headers);
-  console.log(`Current registered teams count: ${currentRegisteredCount} / ${MAX_REGISTRATION_LIMIT}`);
-  if (currentRegisteredCount >= MAX_REGISTRATION_LIMIT) {
+  console.log(`Current registered teams count: ${currentRegisteredCount} / ${MAX_REGISTRATION_LIMIT} (IS_REGISTRATION_CLOSED: ${IS_REGISTRATION_CLOSED})`);
+  if (IS_REGISTRATION_CLOSED && currentRegisteredCount >= MAX_REGISTRATION_LIMIT) {
     return {
       status: 403,
       body: {
@@ -1268,11 +1269,10 @@ async function getRegistrationStatusCount() {
             success: true,
             count: data.count,
             limit: MAX_REGISTRATION_LIMIT,
-            isRegistrationClosed: data.count >= MAX_REGISTRATION_LIMIT,
-            message:
-              data.count >= MAX_REGISTRATION_LIMIT
-                ? REGISTRATION_CLOSED_MESSAGE
-                : 'Registration Open',
+            isRegistrationClosed: IS_REGISTRATION_CLOSED,
+            message: IS_REGISTRATION_CLOSED
+              ? REGISTRATION_CLOSED_MESSAGE
+              : 'Registration Open',
           };
         }
       }
@@ -1291,18 +1291,17 @@ async function getRegistrationStatusCount() {
       success: true,
       count,
       limit: MAX_REGISTRATION_LIMIT,
-      isRegistrationClosed: count >= MAX_REGISTRATION_LIMIT,
-      message:
-        count >= MAX_REGISTRATION_LIMIT
-          ? REGISTRATION_CLOSED_MESSAGE
-          : 'Registration Open',
+      isRegistrationClosed: IS_REGISTRATION_CLOSED,
+      message: IS_REGISTRATION_CLOSED
+        ? REGISTRATION_CLOSED_MESSAGE
+        : 'Registration Open',
     };
   } catch (_) {
     return {
       success: false,
       count: 0,
       limit: MAX_REGISTRATION_LIMIT,
-      isRegistrationClosed: false,
+      isRegistrationClosed: IS_REGISTRATION_CLOSED,
       message: 'Could not fetch live registration count.',
     };
   }

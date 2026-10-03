@@ -129,3 +129,5 @@ export const EVENT_CONFIG: EventConfigType = {
 
 export const eventConfig = EVENT_CONFIG;
 
+export { IS_REGISTRATION_CLOSED } from './event';
+
