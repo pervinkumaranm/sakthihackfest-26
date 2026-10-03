@@ -55,6 +55,94 @@ function loadLocalEnvIfNeeded() {
   }
 }
 
+const DEFAULT_GAS_URL =
+  'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec';
+
+function getActiveGasUrl(): string {
+  loadLocalEnvIfNeeded();
+  const envUrl = process.env.GAS_WEB_APP_URL || process.env.VITE_GOOGLE_SCRIPT_URL;
+  if (!envUrl || envUrl.includes('AKfycby1wwXdxr6hgymC-Xa8rVvJv0vsEe4UeLMG2O6A5bklfVCXpjHkAm3_5AjCDEckZF5e1g')) {
+    return DEFAULT_GAS_URL;
+  }
+  return envUrl;
+}
+
+function normalizeGasRegistration(raw: Record<string, any>): any {
+  const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const getVal = (...keys: string[]) => {
+    for (const key of keys) {
+      if (raw[key] !== undefined && raw[key] !== null && String(raw[key]).trim() !== '') {
+        return String(raw[key]).trim();
+      }
+      const target = norm(key);
+      for (const k of Object.keys(raw)) {
+        if (norm(k) === target && raw[k] !== undefined && raw[k] !== null && String(raw[k]).trim() !== '') {
+          return String(raw[k]).trim();
+        }
+      }
+    }
+    return '';
+  };
+
+  const teamSize = parseInt(getVal('Team Size', 'teamsize'), 10) || 2;
+  const members: any[] = [];
+  for (let m = 2; m <= 4; m++) {
+    const mName = getVal(`Member ${m} Name`, `member${m}name`);
+    if (mName) {
+      members.push({
+        name: mName,
+        college: getVal(`Member ${m} College Name`, `Member ${m} College`, `member${m}college`, `member${m}collegename`),
+        department: getVal(`Member ${m} Department`, `member${m}department`, `member${m}dept`),
+        yearOfStudy: getVal(`Member ${m} Year`, `member${m}year`),
+        whatsapp: getVal(`Member ${m} WhatsApp`, `member${m}whatsapp`),
+        email: getVal(`Member ${m} Email`, `member${m}email`),
+      });
+    }
+  }
+
+  const rawPaymentStatus = getVal('Payment Status', 'paymentstatus').toUpperCase() || 'PENDING';
+  const paymentStatus = ['VERIFIED', 'REJECTED', 'PENDING', 'SUBMITTED'].includes(rawPaymentStatus)
+    ? rawPaymentStatus
+    : 'PENDING';
+
+  const rawRegStatus = getVal('Registration Status', 'registrationstatus').toUpperCase() || 'CONFIRMED';
+  const registrationStatus = ['CONFIRMED', 'VERIFIED', 'REJECTED', 'PENDING'].includes(rawRegStatus)
+    ? rawRegStatus
+    : 'CONFIRMED';
+
+  const rawEmailStatus = getVal('Email Status', 'emailstatus').toUpperCase() || 'PENDING';
+  const emailStatus = ['SENT', 'FAILED', 'PENDING'].includes(rawEmailStatus) ? rawEmailStatus : 'PENDING';
+
+  const regId = getVal('Registration ID', 'registrationid');
+
+  return {
+    registrationId: regId,
+    timestamp: getVal('Timestamp', 'timestamp') || new Date().toISOString(),
+    teamName: getVal('Team Name', 'teamname'),
+    teamSize,
+    selectedDomain: getVal('Selected Domain', 'selecteddomain') || 'Generative AI',
+    selectedTheme: getVal('Selected Theme', 'selectedtheme') || 'General Track',
+    selectedThemeName: getVal('Selected Theme', 'selectedtheme') || 'General Track',
+    accommodationRequired: (getVal('Accommodation Required', 'accommodationrequired') === 'Yes' ? 'Yes' : 'No'),
+    leaderName: getVal('Team Leader Name', 'teamleadername', 'leadername'),
+    leaderCollege: getVal('Team Leader College Name', 'Team Leader College', 'Leader College Name', 'leadercollege', 'teamleadercollege', 'collegename', 'college'),
+    leaderDepartment: getVal('Team Leader Department', 'teamleaderdepartment', 'leaderdepartment', 'leaderdept'),
+    leaderYear: getVal('Team Leader Year', 'teamleaderyear', 'leaderyear'),
+    leaderWhatsapp: getVal('Team Leader WhatsApp', 'teamleaderwhatsapp', 'leaderwhatsapp', 'phone'),
+    leaderEmail: getVal('Team Leader Email', 'teamleaderemail', 'leaderemail'),
+    members,
+    paymentAmount: parseInt(getVal('Payment Amount', 'paymentamount'), 10) || 1000,
+    upiTransactionId: getVal('UPI Transaction ID', 'upitransactionid'),
+    paymentScreenshotDriveUrl: getVal('Payment Screenshot URL', 'paymentscreenshoturl'),
+    driveFileId: getVal('Google Drive File ID', 'googledrivefileid'),
+    paymentStatus,
+    registrationStatus,
+    emailStatus,
+    emailSentAt: getVal('Email Sent At', 'emailsentat'),
+    lastUpdated: getVal('Last Updated', 'lastupdated') || getVal('Timestamp', 'timestamp'),
+  };
+}
+
 function getServiceAccountAuth() {
   loadLocalEnvIfNeeded();
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
@@ -373,80 +461,173 @@ export default async function handler(req: any, res: any) {
 
   const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;
 
-  let sheets: any;
+  let sheets: any = null;
   try {
     const jwt = getServiceAccountAuth();
     sheets = google.sheets({ version: 'v4', auth: jwt });
   } catch (authErr: any) {
-    console.error('Service account auth error:', authErr);
-    return res.status(500).json({
-      success: false,
-      error: 'Unable to connect to Google Sheets backend. Check service account configuration.',
-    });
+    // Service account not available in environment; will use Google Apps Script Web App
+    sheets = null;
   }
 
   // 3. Get All Registrations & Live Statistics
   if (action === 'get_registrations') {
-    try {
-      const { headers, rows } = await getSheetMeta(sheets, spreadsheetId);
-      const registrations = rows
-        .map(row => parseRowToRegistration(row, headers))
-        .filter(r => Boolean(r.registrationId));
+    if (sheets) {
+      try {
+        const { headers, rows } = await getSheetMeta(sheets, spreadsheetId);
+        const registrations = rows
+          .map(row => parseRowToRegistration(row, headers))
+          .filter(r => Boolean(r.registrationId));
 
-      const totalRegistrations = registrations.length;
-      const totalTeams = registrations.length;
-      const totalParticipants = registrations.reduce(
-        (sum, r) => sum + (r.teamSize || 2),
-        0
-      );
+        const totalRegistrations = registrations.length;
+        const totalTeams = registrations.length;
+        const totalParticipants = registrations.reduce(
+          (sum, r) => sum + (r.teamSize || 2),
+          0
+        );
 
-      const paymentSubmitted = registrations.filter(r =>
-        Boolean(r.upiTransactionId && r.upiTransactionId.length > 2)
-      ).length;
-      const paymentPending = registrations.filter(
-        r => r.paymentStatus === 'PENDING'
-      ).length;
-      const verifiedCount = registrations.filter(
-        r => r.paymentStatus === 'VERIFIED'
-      ).length;
-      const rejectedCount = registrations.filter(
-        r => r.paymentStatus === 'REJECTED'
-      ).length;
+        const paymentSubmitted = registrations.filter(r =>
+          Boolean(r.upiTransactionId && r.upiTransactionId.length > 2)
+        ).length;
+        const paymentPending = registrations.filter(
+          r => r.paymentStatus === 'PENDING'
+        ).length;
+        const verifiedCount = registrations.filter(
+          r => r.paymentStatus === 'VERIFIED'
+        ).length;
+        const rejectedCount = registrations.filter(
+          r => r.paymentStatus === 'REJECTED'
+        ).length;
 
-      const accommodationCount = registrations.filter(
-        r => r.accommodationRequired === 'Yes'
-      ).length;
+        const accommodationCount = registrations.filter(
+          r => r.accommodationRequired === 'Yes'
+        ).length;
 
-      const emailSentCount = registrations.filter(
-        r => r.emailStatus === 'SENT'
-      ).length;
-      const emailFailedCount = registrations.filter(
-        r => r.emailStatus === 'FAILED'
-      ).length;
+        const emailSentCount = registrations.filter(
+          r => r.emailStatus === 'SENT'
+        ).length;
+        const emailFailedCount = registrations.filter(
+          r => r.emailStatus === 'FAILED'
+        ).length;
 
-      return res.status(200).json({
-        success: true,
-        data: registrations,
-        stats: {
-          totalRegistrations,
-          totalTeams,
-          totalParticipants,
-          paymentSubmitted,
-          paymentPending,
-          verifiedCount,
-          rejectedCount,
-          accommodationCount,
-          emailSentCount,
-          emailFailedCount,
-        },
-      });
-    } catch (err: any) {
-      console.error('Failed to load registrations:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to load registration data. Please try again.',
-      });
+        return res.status(200).json({
+          success: true,
+          data: registrations,
+          stats: {
+            totalRegistrations,
+            totalTeams,
+            totalParticipants,
+            paymentSubmitted,
+            paymentPending,
+            verifiedCount,
+            rejectedCount,
+            accommodationCount,
+            emailSentCount,
+            emailFailedCount,
+          },
+        });
+      } catch (err: any) {
+        console.warn('Sheets API v4 get_registrations error, falling back to Apps Script Web App:', err.message);
+      }
     }
+
+    // Apps Script Web App fallback
+    const gasUrl = getActiveGasUrl();
+    if (gasUrl) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const gasRes = await fetch(`${gasUrl}?action=GET_REGISTRATIONS`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (gasRes.ok) {
+          const gasJson = await gasRes.json();
+          if (gasJson && gasJson.success && Array.isArray(gasJson.data)) {
+            const registrations = gasJson.data
+              .map((item: any) => normalizeGasRegistration(item))
+              .filter((r: any) => Boolean(r.registrationId));
+
+            const totalRegistrations = registrations.length;
+            const totalTeams = registrations.length;
+            const totalParticipants = registrations.reduce(
+              (sum: number, r: any) => sum + (r.teamSize || 2),
+              0
+            );
+            const paymentSubmitted = registrations.filter((r: any) =>
+              Boolean(r.upiTransactionId && String(r.upiTransactionId).length > 2)
+            ).length;
+            const paymentPending = registrations.filter(
+              (r: any) => r.paymentStatus === 'PENDING'
+            ).length;
+            const verifiedCount = registrations.filter(
+              (r: any) => r.paymentStatus === 'VERIFIED'
+            ).length;
+            const rejectedCount = registrations.filter(
+              (r: any) => r.paymentStatus === 'REJECTED'
+            ).length;
+            const accommodationCount = registrations.filter(
+              (r: any) => r.accommodationRequired === 'Yes'
+            ).length;
+            const emailSentCount = registrations.filter(
+              (r: any) => r.emailStatus === 'SENT'
+            ).length;
+            const emailFailedCount = registrations.filter(
+              (r: any) => r.emailStatus === 'FAILED'
+            ).length;
+
+            return res.status(200).json({
+              success: true,
+              data: registrations,
+              stats: {
+                totalRegistrations,
+                totalTeams,
+                totalParticipants,
+                paymentSubmitted,
+                paymentPending,
+                verifiedCount,
+                rejectedCount,
+                accommodationCount,
+                emailSentCount,
+                emailFailedCount,
+              },
+            });
+          }
+        }
+      } catch (gasErr: any) {
+        console.error('GAS GET_REGISTRATIONS error:', gasErr);
+      }
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to connect to Google Sheets backend. Please verify network or Google Apps Script configuration.',
+    });
+  }
+
+  // 3b. Get Single Registration by ID
+  if (action === 'get_registration') {
+    const targetRegId = String(body.registrationId || '').trim().toUpperCase();
+    if (!targetRegId) {
+      return res.status(400).json({ success: false, error: 'Registration ID is required.' });
+    }
+    const gasUrl = getActiveGasUrl();
+    if (gasUrl) {
+      try {
+        const gasRes = await fetch(`${gasUrl}?action=GET_REGISTRATIONS`);
+        if (gasRes.ok) {
+          const gasJson = await gasRes.json();
+          if (gasJson && gasJson.success && Array.isArray(gasJson.data)) {
+            const found = gasJson.data.find((item: any) => {
+              const id = String(item['Registration ID'] || item.registrationId || item.registrationid || '').trim().toUpperCase();
+              return id === targetRegId;
+            });
+            if (found) {
+              return res.status(200).json({ success: true, data: normalizeGasRegistration(found) });
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    return res.status(404).json({ success: false, error: 'Registration not found' });
   }
 
   // 4. Update Existing Registration Record
@@ -585,6 +766,34 @@ export default async function handler(req: any, res: any) {
     const cleanStatus = String(paymentStatus).toUpperCase();
     if (!['VERIFIED', 'REJECTED', 'PENDING'].includes(cleanStatus)) {
       return res.status(400).json({ success: false, error: 'Invalid payment status value.' });
+    }
+
+    if (!sheets) {
+      const gasUrl = getActiveGasUrl();
+      if (gasUrl) {
+        try {
+          const gasRes = await fetch(gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'UPDATE_STATUS',
+              registrationId,
+              paymentStatus: cleanStatus,
+              registrationStatus: cleanStatus === 'VERIFIED' ? 'CONFIRMED' : cleanStatus === 'REJECTED' ? 'REJECTED' : 'PENDING',
+            }),
+          });
+          const gasJson = await gasRes.json();
+          if (gasJson && gasJson.success) {
+            return res.status(200).json({
+              success: true,
+              message: gasJson.message || 'Payment status updated successfully.',
+              data: { registrationId, paymentStatus: cleanStatus },
+            });
+          }
+        } catch (e: any) {
+          console.error('GAS UPDATE_STATUS error:', e);
+        }
+      }
     }
 
     try {

@@ -1,380 +1,261 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Download, Home, CheckCircle, CheckCircle2, ShieldCheck, QrCode, AlertCircle } from 'lucide-react'
-import QRCode from 'qrcode'
+import { Download, Home, CheckCircle, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react'
 import type { StoredRegistration } from '../types'
 import { EVENT_CONFIG } from '../../config/eventConfig'
-
-function downloadPass(reg: StoredRegistration, qrDataUrl: string) {
-  const canvas = document.createElement('canvas')
-  canvas.width = 800
-  canvas.height = 600
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-
-  // Background
-  ctx.fillStyle = '#050505'
-  ctx.fillRect(0, 0, 800, 600)
-
-  // Red top bar
-  ctx.fillStyle = '#FF3B30'
-  ctx.fillRect(0, 0, 800, 8)
-
-  // Border
-  ctx.strokeStyle = '#2A2A32'
-  ctx.lineWidth = 1.5
-  ctx.strokeRect(20, 24, 760, 552)
-
-  // Title & Header
-  ctx.fillStyle = '#FF3B30'
-  ctx.font = 'bold 13px "JetBrains Mono", monospace'
-  ctx.fillText("SAKTHI HACKFEST'26", 50, 65)
-
-  ctx.fillStyle = '#9A9A9A'
-  ctx.font = '11px "JetBrains Mono", monospace'
-  ctx.fillText('OFFICIAL PARTICIPANT PASS — OCTOBER 10–11, 2026', 50, 85)
-
-  // Divider
-  ctx.strokeStyle = '#2A2A32'
-  ctx.beginPath()
-  ctx.moveTo(50, 100)
-  ctx.lineTo(550, 100)
-  ctx.stroke()
-
-  // Team Name
-  ctx.fillStyle = '#FFFFFF'
-  ctx.font = 'bold 32px "Orbitron", sans-serif'
-  ctx.fillText(reg.teamName.toUpperCase(), 50, 145)
-
-  // Details
-  const fields = [
-    { label: 'REGISTRATION ID', val: reg.registrationId },
-    { label: 'TEAM NAME', val: reg.teamName },
-    { label: 'TEAM LEADER', val: reg.leaderName },
-    { label: 'TEAM LEADER COLLEGE', val: reg.leaderCollege || (reg as any).teamLeader?.college || reg.college || '—' },
-    { label: 'TEAM SIZE', val: `${reg.teamSize} Members` },
-    { label: 'SELECTED DOMAIN', val: reg.selectedDomain || (reg as any).selectedDomain || 'Generative AI' },
-    { label: 'DEPARTMENT', val: `${reg.leaderDepartment} (${reg.leaderYear})` },
-    { label: 'SELECTED THEME', val: reg.selectedThemeName || reg.selectedThemeId || 'Open Innovation' },
-    { label: 'ACCOMMODATION', val: reg.accommodationRequired || 'No' },
-    { label: 'EVENT DATE', val: 'October 10–11, 2026' },
-  ]
-
-  let y = 172
-  fields.forEach(({ label, val }) => {
-    ctx.fillStyle = '#7A7A85'
-    ctx.font = '10px "JetBrains Mono", monospace'
-    ctx.fillText(label, 50, y)
-
-    ctx.fillStyle = label === 'REGISTRATION ID' ? '#FF3B30' : '#FFFFFF'
-    ctx.font = label === 'REGISTRATION ID' ? 'bold 14px "JetBrains Mono", monospace' : '12px "JetBrains Mono", monospace'
-    ctx.fillText(String(val).slice(0, 48), 50, y + 15)
-
-    y += 33
-  })
-
-  // Draw QR
-  if (qrDataUrl) {
-    const qrImg = new Image()
-    qrImg.onload = () => {
-      ctx.drawImage(qrImg, 580, 130, 160, 160)
-      ctx.fillStyle = '#9A9A9A'
-      ctx.font = '10px "JetBrains Mono", monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText(reg.registrationId, 660, 315)
-      ctx.fillText('SCAN FOR VERIFICATION', 660, 332)
-
-      const link = document.createElement('a')
-      link.download = `${reg.registrationId}_${reg.teamName.replace(/\s+/g, '_')}_PASS.png`
-      link.href = canvas.toDataURL('image/png')
-      link.click()
-    }
-    qrImg.src = qrDataUrl
-  }
-}
+import { apiService } from '../services/api'
+import ParticipantPass, { downloadPass } from '../components/ParticipantPass'
 
 export default function Success() {
   const location = useLocation()
-  const navigate = useNavigate()
   const params = useParams<{ id: string }>()
   const [reg, setReg] = useState<StoredRegistration | null>(null)
-  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [confettiFired, setConfettiFired] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
-    const stateReg = location.state?.registration
-    let targetReg: StoredRegistration | null = stateReg || null
+    let isCancelled = false
 
-    if (!targetReg) {
-      const stored = sessionStorage.getItem('shf26_registration')
-      if (stored) {
-        try { targetReg = JSON.parse(stored) } catch (e) {}
+    async function resolveRegistration() {
+      setLoading(true)
+      setError(null)
+
+      // 1. Try location.state
+      const stateReg = location.state?.registration as StoredRegistration | undefined
+      let targetReg: StoredRegistration | null = stateReg || null
+
+      // 2. Try sessionStorage
+      if (!targetReg) {
+        try {
+          const stored = sessionStorage.getItem('shf26_registration')
+          if (stored) {
+            targetReg = JSON.parse(stored)
+          }
+        } catch (_) {}
       }
-    }
 
-    if (!targetReg && params.id) {
-      try {
-        const local = localStorage.getItem('shf26_registrations_v3')
-        if (local) {
-          const list: StoredRegistration[] = JSON.parse(local)
-          const found = list.find(r => r.registrationId === params.id)
-          if (found) targetReg = found
+      // 3. Try localStorage by registration ID
+      const targetId = (params.id || targetReg?.registrationId || '').trim().toUpperCase()
+      if (!targetReg && targetId) {
+        try {
+          const local = localStorage.getItem('shf26_registrations_v3')
+          if (local) {
+            const list: StoredRegistration[] = JSON.parse(local)
+            const found = list.find(r => (r.registrationId || '').toUpperCase() === targetId)
+            if (found) targetReg = found
+          }
+        } catch (_) {}
+      }
+
+      // 4. If still not found, fetch live from backend / Google Sheet by ID
+      if (!targetReg && targetId) {
+        try {
+          const remoteReg = await apiService.getRegistrationById(targetId)
+          if (remoteReg) {
+            targetReg = remoteReg
+          }
+        } catch (fetchErr) {
+          console.warn('Could not fetch registration from backend:', fetchErr)
         }
-      } catch (e) {}
+      }
+
+      if (isCancelled) return
+
+      if (targetReg && targetReg.registrationId) {
+        setReg(targetReg)
+        setError(null)
+
+        // Cache safely in sessionStorage without heavy base64 to prevent QuotaExceededError
+        try {
+          const safeCopy = { ...targetReg }
+          if (safeCopy.paymentScreenshotData && safeCopy.paymentScreenshotData.length > 500) {
+            safeCopy.paymentScreenshotData = ''
+          }
+          sessionStorage.setItem('shf26_registration', JSON.stringify(safeCopy))
+        } catch (_) {}
+
+        // Trigger celebratory confetti once
+        if (!confettiFired) {
+          setConfettiFired(true)
+          import('canvas-confetti').then(({ default: confetti }) => {
+            confetti({
+              particleCount: 130,
+              spread: 85,
+              origin: { y: 0.5 },
+              colors: ['#FF3B30', '#FF7A00', '#ffffff', '#10B981'],
+            })
+          }).catch(() => {})
+        }
+      } else {
+        setError(
+          targetId
+            ? `We could not find a confirmed registration for ID "${targetId}". Please verify your Registration ID or contact the organizers.`
+            : 'No registration was found. Please complete the registration form to obtain your official pass.'
+        )
+      }
+
+      setLoading(false)
     }
 
-    if (!targetReg) {
-      navigate('/register')
-      return
+    resolveRegistration()
+
+    return () => {
+      isCancelled = true
     }
+  }, [location, params.id, confettiFired])
 
-    setReg(targetReg)
-    sessionStorage.setItem('shf26_registration', JSON.stringify(targetReg))
-
-    // QR contains exclusively Registration ID and Team Name
-    const qrPayload = JSON.stringify({
-      id: targetReg.registrationId,
-      team: targetReg.teamName,
-    })
-
-    QRCode.toDataURL(qrPayload, {
-      width: 256,
-      margin: 2,
-      color: { dark: '#ffffff', light: '#0D0D0F' },
-    }).then(setQrDataUrl)
-
-    // Trigger celebratory confetti
-    if (!confettiFired) {
-      setConfettiFired(true)
-      import('canvas-confetti').then(({ default: confetti }) => {
-        confetti({
-          particleCount: 130,
-          spread: 85,
-          origin: { y: 0.5 },
-          colors: ['#FF3B30', '#FF7A00', '#ffffff', '#10B981'],
-        })
-      }).catch(() => {})
+  const handleDownload = async () => {
+    if (!reg) return
+    setIsDownloading(true)
+    try {
+      await downloadPass(reg)
+    } finally {
+      setTimeout(() => setIsDownloading(false), 500)
     }
-  }, [location, navigate, confettiFired])
-
-  if (!reg) return null
+  }
 
   return (
-    <main className="pt-24 pb-28 px-4 sm:px-6 lg:px-8 min-h-screen flex items-start justify-center relative overflow-hidden">
+    <main className="pt-24 pb-28 px-4 sm:px-6 lg:px-8 min-h-screen flex items-start justify-center relative overflow-hidden bg-brand-bg">
       {/* Glow background */}
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-brand-primary/10 blur-[180px] pointer-events-none rounded-full" />
       <div className="bg-cyber-grid-dense absolute inset-0 opacity-40 pointer-events-none" />
 
       <div className="w-full max-w-2xl relative z-10">
-        {/* Header Confirmation Message */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-10"
-        >
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-brand-card/90 border border-brand-border p-12 rounded-2xl text-center shadow-2xl backdrop-blur-xl">
+            <RefreshCw size={36} className="text-brand-primary animate-spin mx-auto mb-4" />
+            <h2 className="font-display font-bold text-xl text-white mb-2">LOADING PARTICIPANT PASS...</h2>
+            <p className="font-mono text-xs text-brand-muted">
+              Retrieving confirmed registration details from {EVENT_CONFIG.eventName} database...
+            </p>
+          </div>
+        )}
+
+        {/* Error / Not Found State */}
+        {!loading && error && (
           <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', delay: 0.15 }}
-            className="inline-flex items-center justify-center w-20 h-20 bg-emerald-500/10 border border-emerald-500/40 rounded-full mb-5 shadow-[0_0_30px_rgba(16,185,129,0.2)]"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-brand-card/90 border border-amber-500/40 p-8 sm:p-10 rounded-2xl text-center shadow-2xl backdrop-blur-xl"
           >
-            <CheckCircle2 size={42} className="text-emerald-400" />
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-500/10 border border-amber-500/30 rounded-full mb-4">
+              <AlertCircle size={32} className="text-amber-400" />
+            </div>
+            <h2 className="font-display font-black text-2xl text-white mb-2">REGISTRATION RECORD NOT FOUND</h2>
+            <p className="font-mono text-xs text-brand-muted max-w-md mx-auto mb-6 leading-relaxed">
+              {error}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                to="/register"
+                className="py-3 px-6 bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all"
+              >
+                GO TO REGISTRATION
+              </Link>
+              <Link
+                to="/"
+                className="py-3 px-6 bg-brand-surface hover:bg-brand-card border border-brand-border text-brand-muted hover:text-white font-mono text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all"
+              >
+                <Home size={16} /> BACK TO HOME
+              </Link>
+            </div>
           </motion.div>
-          <h1 className="font-display font-black text-4xl sm:text-5xl text-white tracking-tight leading-tight mb-2">
-            REGISTRATION<br />
-            <span className="text-brand-primary">CONFIRMED</span>
-          </h1>
-          <p className="font-display text-lg sm:text-xl text-brand-orange tracking-widest uppercase">
-            WELCOME TO {EVENT_CONFIG.eventName}
-          </p>
+        )}
 
-          {/* Prominent Registration ID Box */}
-          <div className="my-6 max-w-xs sm:max-w-sm mx-auto p-4 bg-brand-surface/90 border border-brand-primary/60 rounded-xl shadow-[0_0_30px_rgba(255,59,48,0.2)]">
-            <div className="font-mono text-[10px] text-brand-muted tracking-widest uppercase mb-1">
-              YOUR REGISTRATION ID
-            </div>
-            <div className="font-mono text-2xl sm:text-3xl font-black text-brand-primary tracking-widest">
-              {reg.registrationId}
-            </div>
-          </div>
+        {/* Confirmed Registration & Official Pass View */}
+        {!loading && reg && (
+          <>
+            {/* Header Confirmation Message */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-8"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', delay: 0.15 }}
+                className="inline-flex items-center justify-center w-20 h-20 bg-emerald-500/10 border border-emerald-500/40 rounded-full mb-5 shadow-[0_0_30px_rgba(16,185,129,0.2)]"
+              >
+                <CheckCircle2 size={42} className="text-emerald-400" />
+              </motion.div>
+              <h1 className="font-display font-black text-4xl sm:text-5xl text-white tracking-tight leading-tight mb-2">
+                REGISTRATION<br />
+                <span className="text-brand-primary">CONFIRMED</span>
+              </h1>
+              <p className="font-display text-lg sm:text-xl text-brand-orange tracking-widest uppercase">
+                WELCOME TO {EVENT_CONFIG.eventName}
+              </p>
 
-          {/* Submission Status Indicators */}
-          <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 rounded-full">
-              <CheckCircle size={13} /> Registration Saved
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 rounded-full">
-              <ShieldCheck size={13} /> Payment Screenshot Uploaded
-            </span>
-            {reg.emailStatus === 'SENT' ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 rounded-full">
-                <CheckCircle size={13} /> Confirmation Email Sent
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/30 font-mono text-xs text-amber-400 rounded-full">
-                <AlertCircle size={13} /> Confirmation Email Pending
-              </span>
-            )}
-          </div>
-
-          {reg.emailStatus === 'FAILED' && (
-            <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs max-w-md mx-auto">
-              Confirmation email could not be sent at this time. Please save your Registration ID.
-            </div>
-          )}
-        </motion.div>
-
-        {/* Digital Holographic Participant Pass Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 25 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.25 }}
-          className="bg-brand-card/95 border border-brand-primary/50 p-6 sm:p-8 rounded-2xl shadow-2xl backdrop-blur-xl mb-6 relative overflow-hidden"
-        >
-          {/* Top Pass Header */}
-          <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-5">
-            <div>
-              <div className="font-mono text-xs text-brand-primary tracking-widest mb-0.5">
-                {EVENT_CONFIG.eventName}
-              </div>
-              <div className="font-mono text-xs text-brand-muted">
-                OFFICIAL PARTICIPANT PASS · {EVENT_CONFIG.college.shortName}
-              </div>
-            </div>
-            <img
-              src="/college-banner.jpg"
-              alt="Sree Sakthi Engineering College"
-              className="h-9 w-auto object-contain rounded"
-            />
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-6">
-            {/* Squad & Pass Details */}
-            <div className="flex-1 space-y-3.5">
-              <div>
-                <div className="font-mono text-[10px] text-brand-muted tracking-widest">TEAM NAME</div>
-                <div className="font-display font-black text-2xl text-white tracking-wide">
-                  {reg.teamName}
+              {/* Prominent Registration ID Box */}
+              <div className="my-6 max-w-xs sm:max-w-sm mx-auto p-4 bg-brand-surface/90 border border-brand-primary/60 rounded-xl shadow-[0_0_30px_rgba(255,59,48,0.2)]">
+                <div className="font-mono text-[10px] text-brand-muted tracking-widest uppercase mb-1">
+                  YOUR REGISTRATION ID
+                </div>
+                <div className="font-mono text-2xl sm:text-3xl font-black text-brand-primary tracking-widest">
+                  {reg.registrationId}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">REGISTRATION ID</div>
-                  <div className="font-mono text-base font-bold text-brand-primary">
-                    {reg.registrationId}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">EVENT DATE</div>
-                  <div className="font-mono text-xs font-bold text-white">
-                    {EVENT_CONFIG.eventDate}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">TEAM LEADER</div>
-                  <div className="text-xs font-medium text-gray-200">
-                    {reg.leaderName}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">TEAM LEADER COLLEGE</div>
-                  <div className="text-xs font-medium text-gray-200">
-                    {reg.leaderCollege || (reg as any).teamLeader?.college || (reg as any).teamLeaderCollege || reg.college || '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">TEAM SIZE</div>
-                  <div className="text-xs font-medium text-brand-orange font-mono">
-                    {reg.teamSize} Members
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">SELECTED DOMAIN</div>
-                  <div className="text-xs font-medium text-brand-orange font-mono">
-                    {reg.selectedDomain || (reg as any).selectedDomain || 'Generative AI'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">DEPARTMENT</div>
-                  <div className="text-xs font-medium text-brand-orange font-mono">
-                    {reg.leaderDepartment} ({reg.leaderYear})
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">SELECTED THEME</div>
-                  <div className="text-xs font-medium text-brand-orange font-mono">
-                    {reg.selectedThemeName || reg.selectedThemeId || 'Open Innovation'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-mono text-[10px] text-brand-muted tracking-wider">ACCOMMODATION</div>
-                  <div className={`text-xs font-medium font-mono ${reg.accommodationRequired === 'Yes' ? 'text-amber-400' : 'text-zinc-400'}`}>
-                    {reg.accommodationRequired || 'No'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-[11px] text-emerald-400 rounded">
-                  <CheckCircle size={12} /> CONFIRMED PARTICIPANT ROSTER
+              {/* Submission Status Indicators */}
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 rounded-full">
+                  <CheckCircle size={13} /> Registration Saved
                 </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 rounded-full">
+                  <ShieldCheck size={13} /> Payment Screenshot Uploaded
+                </span>
+                {reg.emailStatus === 'SENT' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 rounded-full">
+                    <CheckCircle size={13} /> Confirmation Email Sent
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/30 font-mono text-xs text-amber-400 rounded-full">
+                    <AlertCircle size={13} /> Confirmation Email Pending
+                  </span>
+                )}
               </div>
-            </div>
 
-            {/* Verification QR Code */}
-            <div className="flex-shrink-0 flex flex-col items-center justify-center p-3 bg-brand-bg/80 border border-brand-border rounded-xl">
-              {qrDataUrl ? (
-                <img
-                  src={qrDataUrl}
-                  alt="Registration QR Pass"
-                  className="w-32 h-32 object-contain rounded"
-                />
-              ) : (
-                <div className="w-32 h-32 flex items-center justify-center">
-                  <QrCode size={40} className="text-brand-muted animate-pulse" />
+              {reg.emailStatus === 'FAILED' && (
+                <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs max-w-md mx-auto">
+                  Confirmation email could not be sent at this time. Please save your Registration ID.
                 </div>
               )}
-              <div className="mt-2 text-center">
-                <div className="font-mono text-[10px] text-white font-bold">{reg.registrationId}</div>
-                <div className="font-mono text-[9px] text-brand-muted">GATE PASS QR</div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+            </motion.div>
 
-        {/* Action Buttons */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35 }}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-        >
-          <button
-            type="button"
-            onClick={() => downloadPass(reg, qrDataUrl)}
-            className="w-full py-4 px-6 bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs sm:text-sm font-bold tracking-wider rounded-xl flex items-center justify-center gap-2.5 transition-all shadow-[0_0_20px_rgba(255,59,48,0.25)] hover:scale-[1.01] cursor-pointer"
-          >
-            <Download size={18} /> DOWNLOAD PASS
-          </button>
+            {/* Canonical Reusable Participant Pass */}
+            <ParticipantPass registration={reg} showDownloadButton={false} />
 
-          <Link
-            to="/"
-            className="w-full py-4 px-6 bg-brand-card hover:bg-brand-surface border border-brand-border hover:border-brand-primary/40 text-brand-muted hover:text-white font-mono text-xs sm:text-sm font-bold tracking-wider rounded-xl flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01]"
-          >
-            <Home size={18} /> BACK TO HOME
-          </Link>
-        </motion.div>
+            {/* Action Buttons */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.35 }}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6"
+            >
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="w-full py-4 px-6 bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs sm:text-sm font-bold tracking-wider rounded-xl flex items-center justify-center gap-2.5 transition-all shadow-[0_0_20px_rgba(255,59,48,0.25)] hover:scale-[1.01] cursor-pointer disabled:opacity-50"
+              >
+                <Download size={18} /> {isDownloading ? 'PREPARING PASS...' : 'DOWNLOAD PASS'}
+              </button>
+
+              <Link
+                to="/"
+                className="w-full py-4 px-6 bg-brand-card hover:bg-brand-surface border border-brand-border hover:border-brand-primary/40 text-brand-muted hover:text-white font-mono text-xs sm:text-sm font-bold tracking-wider rounded-xl flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01]"
+              >
+                <Home size={18} /> BACK TO HOME
+              </Link>
+            </motion.div>
+          </>
+        )}
       </div>
     </main>
   )

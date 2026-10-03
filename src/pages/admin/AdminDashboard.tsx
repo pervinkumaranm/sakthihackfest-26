@@ -7,9 +7,11 @@ import {
   Mail, Trash2, Edit3, Filter, ChevronDown, Image as ImageIcon,
   Building, Phone, Calendar, UserCheck, ShieldAlert, FileText, CheckSquare,
   Trophy, Medal, Award, Timer, Flame, GraduationCap, Star, Sparkles, TrendingUp, BarChart3,
-  Play, Pause, Square, RotateCcw, Megaphone, MonitorPlay, Plus, Bell, Volume2, Tv, Radio, Crown
+  Play, Pause, Square, RotateCcw, Megaphone, MonitorPlay, Plus, Bell, Volume2, Tv, Radio, Crown,
+  QrCode
 } from 'lucide-react'
 import { apiService } from '../../services/api'
+import ParticipantPass from '../../components/ParticipantPass'
 import { timerService, type HackathonTimerState } from '../../services/timerService'
 import { winnerService, type WinnerAnnouncementState, type WinnerTeamRecord } from '../../services/winnerService'
 import type { StoredRegistration, AdminStats, PaymentStatus, RegistrationStatus } from '../../types'
@@ -67,6 +69,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [editingReg, setEditingReg] = useState<StoredRegistration | null>(null)
   const [deletingReg, setDeletingReg] = useState<StoredRegistration | null>(null)
   const [verifyingReg, setVerifyingReg] = useState<StoredRegistration | null>(null)
+  const [passReg, setPassReg] = useState<StoredRegistration | null>(null)
 
   // Evaluation & Scoring State (stored locally per team)
   const [evaluations, setEvaluations] = useState<Record<string, TeamEvaluation>>(() => {
@@ -2366,6 +2369,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
+                                  onClick={() => setPassReg(reg)}
+                                  title="Generate / View Pass"
+                                  className="p-1.5 rounded-lg border border-brand-primary/40 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary transition-colors"
+                                >
+                                  <QrCode size={14} />
+                                </button>
+                                <button
                                   onClick={() => setSelectedReg(reg)}
                                   title="View Registration Details"
                                   className="p-1.5 rounded-lg border border-brand-border bg-brand-surface hover:bg-brand-card text-brand-muted hover:text-white"
@@ -2455,6 +2465,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <span className="text-white font-medium">{reg.upiTransactionId || 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => setPassReg(reg)}
+                              className="px-2.5 py-1 rounded-lg bg-brand-primary/10 border border-brand-primary/30 text-xs font-mono text-brand-primary flex items-center gap-1"
+                              title="Generate Pass"
+                            >
+                              <QrCode size={12} /> Pass
+                            </button>
                             <button
                               onClick={() => setSelectedReg(reg)}
                               className="px-2.5 py-1 rounded-lg bg-brand-surface border border-brand-border text-xs font-mono text-white"
@@ -2675,6 +2692,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   <button
                     onClick={() => {
                       const r = selectedReg
+                      setPassReg(r)
+                    }}
+                    className="px-3.5 py-2 rounded-xl border border-brand-primary/40 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <QrCode size={14} /> GENERATE PASS
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const r = selectedReg
                       setSelectedReg(null)
                       setEditingReg({ ...r })
                     }}
@@ -2715,6 +2742,44 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <Trash2 size={14} /> DELETE
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL: GENERATE / VIEW PASS ──────────────────────────────────── */}
+      <AnimatePresence>
+        {passReg && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-4xl bg-brand-surface border border-brand-border rounded-2xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col p-6 my-auto"
+            >
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-brand-border">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-brand-primary font-bold">ADMIN PASS GENERATOR</span>
+                    <span className="text-brand-muted text-xs">·</span>
+                    <span className="font-mono text-xs text-brand-muted">{passReg.registrationId}</span>
+                  </div>
+                  <h2 className="font-display font-black text-xl text-white mt-1">
+                    Pass for {passReg.teamName}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setPassReg(null)}
+                  className="p-2 rounded-xl text-brand-muted hover:text-white bg-brand-card hover:bg-brand-surface border border-brand-border transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Canonical ParticipantPass component */}
+              <div className="flex justify-center w-full">
+                <ParticipantPass registration={passReg} showDownloadButton={true} />
               </div>
             </motion.div>
           </div>

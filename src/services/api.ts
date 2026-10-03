@@ -44,6 +44,87 @@ function saveLocalRegistrations(list: StoredRegistration[]) {
   }
 }
 
+const DEFAULT_GAS_URL =
+  'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec'
+
+export function normalizeGasRegistration(raw: Record<string, any>): StoredRegistration {
+  const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const getVal = (...keys: string[]) => {
+    for (const key of keys) {
+      if (raw[key] !== undefined && raw[key] !== null && String(raw[key]).trim() !== '') {
+        return String(raw[key]).trim()
+      }
+      const target = norm(key)
+      for (const k of Object.keys(raw)) {
+        if (norm(k) === target && raw[k] !== undefined && raw[k] !== null && String(raw[k]).trim() !== '') {
+          return String(raw[k]).trim()
+        }
+      }
+    }
+    return ''
+  }
+
+  const teamSize = parseInt(getVal('Team Size', 'teamsize'), 10) || 2
+  const members: any[] = []
+  for (let m = 2; m <= 4; m++) {
+    const mName = getVal(`Member ${m} Name`, `member${m}name`)
+    if (mName) {
+      members.push({
+        name: mName,
+        college: getVal(`Member ${m} College Name`, `Member ${m} College`, `member${m}college`, `member${m}collegename`),
+        department: getVal(`Member ${m} Department`, `member${m}department`, `member${m}dept`),
+        yearOfStudy: getVal(`Member ${m} Year`, `member${m}year`),
+        whatsapp: getVal(`Member ${m} WhatsApp`, `member${m}whatsapp`),
+        email: getVal(`Member ${m} Email`, `member${m}email`),
+      })
+    }
+  }
+
+  const rawPaymentStatus = getVal('Payment Status', 'paymentstatus').toUpperCase() || 'PENDING'
+  const paymentStatus = ['VERIFIED', 'REJECTED', 'PENDING', 'SUBMITTED'].includes(rawPaymentStatus)
+    ? (rawPaymentStatus as any)
+    : 'PENDING'
+
+  const rawRegStatus = getVal('Registration Status', 'registrationstatus').toUpperCase() || 'CONFIRMED'
+  const registrationStatus = ['CONFIRMED', 'VERIFIED', 'REJECTED', 'PENDING'].includes(rawRegStatus)
+    ? (rawRegStatus as any)
+    : 'CONFIRMED'
+
+  const rawEmailStatus = getVal('Email Status', 'emailstatus').toUpperCase() || 'PENDING'
+  const emailStatus = ['SENT', 'FAILED', 'PENDING'].includes(rawEmailStatus)
+    ? (rawEmailStatus as any)
+    : 'PENDING'
+
+  const regId = getVal('Registration ID', 'registrationid')
+
+  return {
+    registrationId: regId,
+    timestamp: getVal('Timestamp', 'timestamp') || new Date().toISOString(),
+    teamName: getVal('Team Name', 'teamname'),
+    teamSize,
+    selectedDomain: getVal('Selected Domain', 'selecteddomain') || 'Generative AI',
+    selectedTheme: getVal('Selected Theme', 'selectedtheme') || 'General Track',
+    selectedThemeName: getVal('Selected Theme', 'selectedtheme') || 'General Track',
+    accommodationRequired: (getVal('Accommodation Required', 'accommodationrequired') === 'Yes' ? 'Yes' : 'No') as 'Yes' | 'No',
+    leaderName: getVal('Team Leader Name', 'teamleadername', 'leadername'),
+    leaderCollege: getVal('Team Leader College Name', 'Team Leader College', 'Leader College Name', 'leadercollege', 'teamleadercollege', 'collegename', 'college'),
+    leaderDepartment: getVal('Team Leader Department', 'teamleaderdepartment', 'leaderdepartment', 'leaderdept'),
+    leaderYear: getVal('Team Leader Year', 'teamleaderyear', 'leaderyear'),
+    leaderWhatsapp: getVal('Team Leader WhatsApp', 'teamleaderwhatsapp', 'leaderwhatsapp', 'phone'),
+    leaderEmail: getVal('Team Leader Email', 'teamleaderemail', 'leaderemail'),
+    members,
+    paymentAmount: parseInt(getVal('Payment Amount', 'paymentamount'), 10) || 1000,
+    upiTransactionId: getVal('UPI Transaction ID', 'upitransactionid'),
+    paymentScreenshotDriveUrl: getVal('Payment Screenshot URL', 'paymentscreenshoturl'),
+    driveFileId: getVal('Google Drive File ID', 'googledrivefileid'),
+    paymentStatus,
+    registrationStatus,
+    emailStatus,
+    emailSentAt: getVal('Email Sent At', 'emailsentat'),
+    lastUpdated: getVal('Last Updated', 'lastupdated') || getVal('Timestamp', 'timestamp'),
+  }
+}
+
 function getFriendlyErrorMessage(errorCode?: string, rawMessage?: string): string {
   if (
     errorCode === 'REGISTRATION_CLOSED' ||
@@ -351,23 +432,97 @@ export const apiService = {
         body: JSON.stringify({ action: 'get_registrations' }),
       })
       const result = await res.json()
-      if (res.ok && result.success) {
+      if (res.ok && result.success && Array.isArray(result.data)) {
         return {
           registrations: result.data || [],
           stats: result.stats,
         }
       }
-      return {
-        registrations: [],
-        error: result.error || 'Unable to load registration data. Please try again.',
-      }
     } catch (err) {
-      console.error('Failed to fetch registrations from /api/admin:', err)
-      return {
-        registrations: [],
-        error: 'Unable to load registration data. Please try again.',
-      }
+      console.warn('Failed to fetch registrations from /api/admin, falling back to Apps Script Web App:', err)
     }
+
+    // Direct Google Apps Script fallback
+    try {
+      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
+      if (gasRes.ok) {
+        const gasJson = await gasRes.json()
+        if (gasJson && gasJson.success && Array.isArray(gasJson.data)) {
+          const registrations = gasJson.data
+            .map((item: any) => normalizeGasRegistration(item))
+            .filter((r: any) => Boolean(r.registrationId))
+
+          return {
+            registrations,
+          }
+        }
+      }
+    } catch (gasErr) {
+      console.error('Direct Google Apps Script fallback error:', gasErr)
+    }
+
+    return {
+      registrations: [],
+      error: 'Unable to load registration data. Please try again.',
+    }
+  },
+
+  /**
+   * Fetch a single confirmed registration by its Registration ID
+   * Checks local cache -> queries /api/register -> falls back to Apps Script Web App
+   */
+  async getRegistrationById(id: string): Promise<StoredRegistration | null> {
+    const cleanId = String(id || '').trim().toUpperCase()
+    if (!cleanId) return null
+
+    // 1. Check local cache
+    const local = getLocalRegistrations()
+    const foundLocal = local.find(r => r.registrationId === cleanId)
+    if (foundLocal && foundLocal.teamName) {
+      return foundLocal
+    }
+
+    // 2. Query /api/register?action=GET_REGISTRATION
+    try {
+      const res = await fetch(`/api/register?action=GET_REGISTRATION&id=${encodeURIComponent(cleanId)}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.success && data.data) {
+          const record = data.data as StoredRegistration
+          const updatedList = getLocalRegistrations().filter(r => r.registrationId !== cleanId)
+          updatedList.unshift(record)
+          saveLocalRegistrations(updatedList)
+          return record
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch registration by ID from /api/register:', e)
+    }
+
+    // 3. Fallback direct to Google Apps Script Web App
+    try {
+      const res = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json && json.success && Array.isArray(json.data)) {
+          const match = json.data.find((item: any) => {
+            const rawId = String(item['Registration ID'] || item.registrationId || item.registrationid || '').trim().toUpperCase()
+            return rawId === cleanId
+          })
+          if (match) {
+            const record = normalizeGasRegistration(match)
+            const updatedList = getLocalRegistrations().filter(r => r.registrationId !== cleanId)
+            updatedList.unshift(record)
+            saveLocalRegistrations(updatedList)
+            return record
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed direct Apps Script lookup for registration ID:', e)
+    }
+
+    return null
   },
 
   /**

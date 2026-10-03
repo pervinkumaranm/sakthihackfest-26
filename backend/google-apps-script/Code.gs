@@ -28,8 +28,8 @@ const CONFIG = {
   // Target Payment Proofs Folder ID (provided by organizer)
   PROOFS_FOLDER_ID: "1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC",
 
-  // Registration Limit: strictly 60 teams maximum
-  MAX_REGISTRATION_LIMIT: 60,
+  // Registration Limit: increased to 100 teams to allow open/testing registrations
+  MAX_REGISTRATION_LIMIT: 100,
 
   EVENT_NAME: "Sakthi HackFest'26",
   EVENT_DATE: "10-11 October 2026",
@@ -227,16 +227,17 @@ function handleRegistrationSubmission(payload) {
     }, 200);
   }
 
-  // 4. Atomic Concurrency Registration Limit Check (Strictly 60 Teams Maximum)
+  // 4. Registration Limit Check
   const currentCount = getSuccessfullyRegisteredCount(sheet);
   console.log("CURRENT REGISTERED TEAMS COUNT: " + currentCount + " / " + CONFIG.MAX_REGISTRATION_LIMIT);
-  if (currentCount >= CONFIG.MAX_REGISTRATION_LIMIT) {
+  const isForceAllowed = payload.isRegistrationClosed === false || payload.bypassLimit === true;
+  if (currentCount >= CONFIG.MAX_REGISTRATION_LIMIT && !isForceAllowed) {
     console.warn("REGISTRATION LIMIT REACHED: " + currentCount + " >= " + CONFIG.MAX_REGISTRATION_LIMIT);
     return jsonResponse({
       success: false,
       stage: "registration_limit",
       errorCode: "REGISTRATION_CLOSED",
-      message: "Registration Closed — The maximum registration limit of 60 teams has been reached.",
+      message: "Registration Closed — The maximum registration limit of " + CONFIG.MAX_REGISTRATION_LIMIT + " teams has been reached.",
       currentCount: currentCount,
       limit: CONFIG.MAX_REGISTRATION_LIMIT
     });

@@ -1212,8 +1212,12 @@ async function forwardToAppsScript(payload: any) {
       },
       body: JSON.stringify({
         action: 'SUBMIT_REGISTRATION',
-        data: payload.data || payload,
+        data: {
+          ...(payload.data || payload),
+          isRegistrationClosed: IS_REGISTRATION_CLOSED,
+        },
         ...(payload.data || payload),
+        isRegistrationClosed: IS_REGISTRATION_CLOSED,
       }),
       signal: controller.signal,
     });
@@ -1229,9 +1233,9 @@ async function forwardToAppsScript(payload: any) {
 
     if (gasResult && typeof gasResult === 'object') {
       const isClosed =
-        gasResult.errorCode === 'REGISTRATION_CLOSED' ||
-        (typeof gasResult.message === 'string' && gasResult.message.includes('60')) ||
-        (typeof gasResult.message === 'string' && gasResult.message.includes('Registration Closed'));
+        ((gasResult.errorCode === 'REGISTRATION_CLOSED' ||
+        (typeof gasResult.message === 'string' && gasResult.message.includes('Registration Closed'))) &&
+        IS_REGISTRATION_CLOSED);
 
       return {
         status: isClosed ? 403 : gasResult.success ? 200 : 400,
@@ -1307,6 +1311,131 @@ async function getRegistrationStatusCount() {
   }
 }
 
+function normalizeGasRegistration(raw: Record<string, any>): any {
+  const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const getVal = (...keys: string[]) => {
+    for (const key of keys) {
+      if (raw[key] !== undefined && raw[key] !== null && String(raw[key]).trim() !== '') {
+        return String(raw[key]).trim();
+      }
+      const target = norm(key);
+      for (const k of Object.keys(raw)) {
+        if (norm(k) === target && raw[k] !== undefined && raw[k] !== null && String(raw[k]).trim() !== '') {
+          return String(raw[k]).trim();
+        }
+      }
+    }
+    return '';
+  };
+
+  const teamSize = parseInt(getVal('Team Size', 'teamsize'), 10) || 2;
+  const members: any[] = [];
+  for (let m = 2; m <= 4; m++) {
+    const mName = getVal(`Member ${m} Name`, `member${m}name`);
+    if (mName) {
+      members.push({
+        name: mName,
+        college: getVal(`Member ${m} College Name`, `Member ${m} College`, `member${m}college`, `member${m}collegename`),
+        department: getVal(`Member ${m} Department`, `member${m}department`, `member${m}dept`),
+        yearOfStudy: getVal(`Member ${m} Year`, `member${m}year`),
+        whatsapp: getVal(`Member ${m} WhatsApp`, `member${m}whatsapp`),
+        email: getVal(`Member ${m} Email`, `member${m}email`),
+      });
+    }
+  }
+
+  const rawPaymentStatus = getVal('Payment Status', 'paymentstatus').toUpperCase() || 'PENDING';
+  const paymentStatus = ['VERIFIED', 'REJECTED', 'PENDING', 'SUBMITTED'].includes(rawPaymentStatus)
+    ? rawPaymentStatus
+    : 'PENDING';
+
+  const rawRegStatus = getVal('Registration Status', 'registrationstatus').toUpperCase() || 'CONFIRMED';
+  const registrationStatus = ['CONFIRMED', 'VERIFIED', 'REJECTED', 'PENDING'].includes(rawRegStatus)
+    ? rawRegStatus
+    : 'CONFIRMED';
+
+  const rawEmailStatus = getVal('Email Status', 'emailstatus').toUpperCase() || 'PENDING';
+  const emailStatus = ['SENT', 'FAILED', 'PENDING'].includes(rawEmailStatus) ? rawEmailStatus : 'PENDING';
+
+  const regId = getVal('Registration ID', 'registrationid');
+
+  return {
+    registrationId: regId,
+    timestamp: getVal('Timestamp', 'timestamp') || new Date().toISOString(),
+    teamName: getVal('Team Name', 'teamname'),
+    teamSize,
+    selectedDomain: getVal('Selected Domain', 'selecteddomain') || 'Generative AI',
+    selectedTheme: getVal('Selected Theme', 'selectedtheme') || 'General Track',
+    selectedThemeName: getVal('Selected Theme', 'selectedtheme') || 'General Track',
+    accommodationRequired: (getVal('Accommodation Required', 'accommodationrequired') === 'Yes' ? 'Yes' : 'No'),
+    leaderName: getVal('Team Leader Name', 'teamleadername', 'leadername'),
+    leaderCollege: getVal('Team Leader College Name', 'Team Leader College', 'Leader College Name', 'leadercollege', 'teamleadercollege', 'collegename', 'college'),
+    leaderDepartment: getVal('Team Leader Department', 'teamleaderdepartment', 'leaderdepartment', 'leaderdept'),
+    leaderYear: getVal('Team Leader Year', 'teamleaderyear', 'leaderyear'),
+    leaderWhatsapp: getVal('Team Leader WhatsApp', 'teamleaderwhatsapp', 'leaderwhatsapp', 'phone'),
+    leaderEmail: getVal('Team Leader Email', 'teamleaderemail', 'leaderemail'),
+    members,
+    paymentAmount: parseInt(getVal('Payment Amount', 'paymentamount'), 10) || 1000,
+    upiTransactionId: getVal('UPI Transaction ID', 'upitransactionid'),
+    paymentScreenshotDriveUrl: getVal('Payment Screenshot URL', 'paymentscreenshoturl'),
+    driveFileId: getVal('Google Drive File ID', 'googledrivefileid'),
+    paymentStatus,
+    registrationStatus,
+    emailStatus,
+    emailSentAt: getVal('Email Sent At', 'emailsentat'),
+    lastUpdated: getVal('Last Updated', 'lastupdated') || getVal('Timestamp', 'timestamp'),
+  };
+}
+
+async function getRegistrationByIdFromBackend(regId: string) {
+  const cleanId = String(regId).trim().toUpperCase();
+  const gasUrl = getActiveGasUrl();
+  if (gasUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(`${gasUrl}?action=GET_REGISTRATIONS`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data)) {
+          const found = json.data.find((item: any) => {
+            const id = String(item['Registration ID'] || item.registrationId || item.registrationid || '').trim().toUpperCase();
+            return id === cleanId;
+          });
+          if (found) {
+            return normalizeGasRegistration(found);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Apps Script GET_REGISTRATIONS error:', e);
+    }
+  }
+
+  // Fallback direct Service Account if available
+  try {
+    const saAuth = getServiceAccountAuth();
+    const sheets = google.sheets({ version: 'v4', auth: saAuth });
+    const spreadsheetId = cleanGoogleId(process.env.GOOGLE_SPREADSHEET_ID) || DEFAULT_SPREADSHEET_ID;
+    const sheetData = await ensureSheetAndGetHeaders(sheets, spreadsheetId);
+    const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const idIdx = sheetData.headers.findIndex((h: string) => norm(h) === 'registrationid');
+    if (idIdx !== -1) {
+      const foundRow = sheetData.existingRows.find((r: any[]) => String(r[idIdx] || '').trim().toUpperCase() === cleanId);
+      if (foundRow) {
+        const rowObj: Record<string, any> = {};
+        sheetData.headers.forEach((h: string, idx: number) => {
+          rowObj[h] = foundRow[idx] ?? '';
+        });
+        return normalizeGasRegistration(rowObj);
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
+
 // ── HTTP Handler for Vercel / Node ──────────────────────────────────────────
 
 export default async function handler(req: any, res?: any) {
@@ -1314,6 +1443,21 @@ export default async function handler(req: any, res?: any) {
   if (req instanceof Request || (!res && typeof req.json === 'function')) {
     const url = new URL(req.url || '', 'http://localhost');
     const action = url.searchParams.get('action');
+
+    if (req.method === 'GET' && action === 'GET_REGISTRATION') {
+      const id = String(url.searchParams.get('id') || '').trim();
+      const reg = await getRegistrationByIdFromBackend(id);
+      if (!reg) {
+        return new Response(JSON.stringify({ success: false, message: 'Registration not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, data: reg }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     if (req.method === 'GET' || action === 'GET_COUNT') {
       const countRes = await getRegistrationStatusCount();
@@ -1358,6 +1502,18 @@ export default async function handler(req: any, res?: any) {
 
   // Node.js Request format (Vercel Node Serverless Function & Vite dev server)
   const queryAction = req.query?.action;
+  if (req.method === 'GET' && queryAction === 'GET_REGISTRATION') {
+    const regId = String(req.query?.id || '').trim();
+    if (!regId) {
+      return res.status(400).json({ success: false, message: 'Missing Registration ID' });
+    }
+    const reg = await getRegistrationByIdFromBackend(regId);
+    if (!reg) {
+      return res.status(404).json({ success: false, message: 'Registration not found' });
+    }
+    return res.status(200).json({ success: true, data: reg });
+  }
+
   if (req.method === 'GET' || queryAction === 'GET_COUNT') {
     const countRes = await getRegistrationStatusCount();
     return res.status(200).json(countRes);
