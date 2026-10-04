@@ -845,8 +845,50 @@ export const apiService = {
         }),
       })
       const result = await res.json()
+      // Resilient fallback: If /api/accommodation returns ACCOMMODATION_CLOSED or error,
+      // submit directly to Google Apps Script
+      if (!result.success && (result.errorCode === 'ACCOMMODATION_CLOSED' || res.status >= 400)) {
+        try {
+          const gasRes = await fetch(DEFAULT_GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'SUBMIT_ACCOMMODATION',
+              data: {
+                ...data,
+                paymentScreenshotBase64: data.paymentScreenshotData,
+              },
+            }),
+            signal: AbortSignal.timeout(35000),
+          })
+          const gasResult = await gasRes.json()
+          if (gasResult && gasResult.success) {
+            return gasResult
+          }
+        } catch (_) {}
+      }
       return result
     } catch (err: any) {
+      // Network error to /api/accommodation: try direct GAS submission
+      try {
+        const gasRes = await fetch(DEFAULT_GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'SUBMIT_ACCOMMODATION',
+            data: {
+              ...data,
+              paymentScreenshotBase64: data.paymentScreenshotData,
+            },
+          }),
+          signal: AbortSignal.timeout(35000),
+        })
+        const gasResult = await gasRes.json()
+        if (gasResult && gasResult.success) {
+          return gasResult
+        }
+      } catch (_) {}
+
       return {
         success: false,
         error: err.message || 'Failed to submit accommodation request.',

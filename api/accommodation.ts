@@ -97,22 +97,54 @@ function verifyAdminToken(token?: string): boolean {
   }
 }
 
-function isAccommodationOpen(): boolean {
+let cachedAccommodationOpen: { value: boolean; timestamp: number } | null = null;
+
+async function isAccommodationOpen(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedAccommodationOpen && now - cachedAccommodationOpen.timestamp < 15000) {
+    return cachedAccommodationOpen.value;
+  }
+
+  // 1. Check Google Apps Script (central persistent source of truth)
+  try {
+    const gasUrl = getAccommodationGasUrl();
+    if (gasUrl) {
+      const res = await fetch(`${gasUrl}?action=GET_TOGGLES`, {
+        signal: AbortSignal.timeout(2500),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (typeof json.accommodationOpen === 'boolean') {
+          cachedAccommodationOpen = { value: json.accommodationOpen, timestamp: now };
+          return json.accommodationOpen;
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 2. Check /tmp/toggles.json if present
   try {
     const tmpFile = '/tmp/toggles.json';
     if (fs.existsSync(tmpFile)) {
       const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
       if (typeof parsed.accommodationOpen === 'boolean') {
-        return parsed.accommodationOpen;
-      }
-    }
-    if (fs.existsSync(TOGGLES_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(TOGGLES_FILE, 'utf8'));
-      if (typeof parsed.accommodationOpen === 'boolean') {
+        cachedAccommodationOpen = { value: parsed.accommodationOpen, timestamp: now };
         return parsed.accommodationOpen;
       }
     }
   } catch (_) {}
+
+  // 3. Check TOGGLES_FILE in repository bundle
+  try {
+    if (fs.existsSync(TOGGLES_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(TOGGLES_FILE, 'utf8'));
+      if (typeof parsed.accommodationOpen === 'boolean') {
+        cachedAccommodationOpen = { value: parsed.accommodationOpen, timestamp: now };
+        return parsed.accommodationOpen;
+      }
+    }
+  } catch (_) {}
+
   return true;
 }
 
@@ -392,7 +424,8 @@ export default async function handler(req: any, res: any) {
     // ── PUBLIC: SUBMIT_ACCOMMODATION ────────────────────────────────────────
     if (action === 'SUBMIT_ACCOMMODATION') {
       // 1. Check accommodation toggle
-      if (!isAccommodationOpen()) {
+      const isOpen = await isAccommodationOpen();
+      if (!isOpen) {
         return res.status(403).json({
           success: false,
           stage: 'validation',
