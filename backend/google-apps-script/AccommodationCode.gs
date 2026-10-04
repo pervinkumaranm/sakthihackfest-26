@@ -24,7 +24,7 @@ if (typeof ACCOMMODATION_CONFIG === "undefined") {
     PROOFS_FOLDER_ID: "1kXByHekf9UBL2ZgKHskUq1BrXG7hBn5y",
     FEE_PER_MEMBER: 100,
     EVENT_NAME: "Sakthi HackFest'26",
-    ACCOMMODATION_DATE: "9th October 2026 (Night)",
+    ACCOMMODATION_DATE: "9th October 2026",
     EVENT_DATE: "10-11 October 2026",
     OFFICIAL_EMAIL: "sakthihackfest@gmail.com",
     EMAIL_SENDER_NAME: "Sakthi HackFest'26 Team",
@@ -703,7 +703,7 @@ function buildAccommodationEmailPlainText(d) {
     "Team Name: " + d.teamName,
     "Team Code: " + d.teamCode,
     "",
-    "Members requesting accommodation (Night of 9th October):",
+    "Members requesting accommodation (9th October 2026):",
     memberList,
     "",
     "Number of members: " + d.memberCount,
@@ -712,7 +712,7 @@ function buildAccommodationEmailPlainText(d) {
     "UPI Transaction ID: " + d.upiTransactionId,
     "",
     "Important Notes:",
-    "1. Accommodation is strictly available for the night of 9th October 2026.",
+    "1. Accommodation is strictly available on 9th October 2026.",
     "2. Boys and girls hostel facilities are separate.",
     "3. College ID card is mandatory at check-in.",
     "4. Our accommodation team will verify your payment and send further hostel check-in details.",
@@ -775,7 +775,7 @@ function buildAccommodationEmailHtml(d) {
 '                </tr>' +
 '                <tr>' +
 '                  <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 13.5px; color: #64748b;">Accommodation Date</td>' +
-'                  <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; color: #0f172a;">9th October 2026 (Night Only)</td>' +
+'                  <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; color: #0f172a;">9th October 2026</td>' +
 '                </tr>' +
 '                <tr>' +
 '                  <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 13.5px; color: #64748b;">Members Booked</td>' +
@@ -793,7 +793,7 @@ function buildAccommodationEmailHtml(d) {
 '              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; margin-bottom: 24px;">' +
 '                <tr>' +
 '                  <td style="padding: 16px;">' +
-'                    <p style="margin: 0 0 8px 0; font-size: 13.5px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Members Staying at SSEC Hostels:</p>' +
+'                    <p style="margin: 0 0 8px 0; font-size: 13.5px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Members Need Accommodation:</p>' +
 '                    <ul style="margin: 0; padding-left: 20px; font-size: 14px;">' +
                       memberListItems +
 '                    </ul>' +
@@ -804,7 +804,7 @@ function buildAccommodationEmailHtml(d) {
 '                <tr>' +
 '                  <td style="padding: 16px; font-size: 13.5px; color: #92400e; line-height: 1.6;">' +
 '                    <strong style="display: block; margin-bottom: 6px; font-size: 14px;">Hostel Check-in Instructions:</strong>' +
-'                    1. Accommodation is strictly provided on <strong>9th October 2026 (Night)</strong>.<br>' +
+'                    1. Accommodation is strictly provided on <strong>9th October 2026</strong>.<br>' +
 '                    2. Separate, secured hostel blocks are arranged for boys and girls.<br>' +
 '                    3. Every participant must present their original <strong>College ID Card</strong> at the hostel reception.<br>' +
 '                    4. Please maintain campus decorum and follow hostel curfew guidelines.' +

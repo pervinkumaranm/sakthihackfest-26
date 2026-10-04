@@ -15,7 +15,7 @@ var ACCOMMODATION_CONFIG = {
   PROOFS_FOLDER_ID: "1kXByHekf9UBL2ZgKHskUq1BrXG7hBn5y",
   FEE_PER_MEMBER: 100,
   EVENT_NAME: "Sakthi HackFest'26",
-  ACCOMMODATION_DATE: "9th October 2026 (Night)",
+  ACCOMMODATION_DATE: "9th October 2026",
   EVENT_DATE: "10-11 October 2026",
   OFFICIAL_EMAIL: "sakthihackfest@gmail.com",
   EMAIL_SENDER_NAME: "Sakthi HackFest'26 Team",

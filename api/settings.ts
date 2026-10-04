@@ -24,6 +24,7 @@ interface TogglesState {
 }
 
 const TOGGLES_FILE = path.resolve(process.cwd(), 'config/toggles.json');
+const TMP_TOGGLES_FILE = '/tmp/toggles.json';
 
 // Memory cache
 let inMemoryToggles: TogglesState = {
@@ -34,6 +35,21 @@ let inMemoryToggles: TogglesState = {
 
 function readToggles(): TogglesState {
   try {
+    // 1. Try reading from writable serverless /tmp if present
+    if (fs.existsSync(TMP_TOGGLES_FILE)) {
+      const raw = fs.readFileSync(TMP_TOGGLES_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.registrationOpen === 'boolean') {
+        inMemoryToggles = {
+          registrationOpen: parsed.registrationOpen,
+          accommodationOpen: typeof parsed.accommodationOpen === 'boolean' ? parsed.accommodationOpen : true,
+          lastUpdated: parsed.lastUpdated || new Date().toISOString(),
+        };
+        return inMemoryToggles;
+      }
+    }
+
+    // 2. Try reading from project bundle config/toggles.json
     if (fs.existsSync(TOGGLES_FILE)) {
       const raw = fs.readFileSync(TOGGLES_FILE, 'utf8');
       const parsed = JSON.parse(raw);
@@ -46,12 +62,12 @@ function readToggles(): TogglesState {
       }
     }
   } catch (err) {
-    console.warn('Could not read toggles.json, using in-memory state:', err);
+    console.warn('Could not read toggles from disk, using in-memory state:', err);
   }
   return inMemoryToggles;
 }
 
-function writeToggles(next: Partial<TogglesState>): TogglesState {
+async function writeToggles(next: Partial<TogglesState>): Promise<TogglesState> {
   const current = readToggles();
   const updated: TogglesState = {
     registrationOpen: next.registrationOpen !== undefined ? Boolean(next.registrationOpen) : current.registrationOpen,
@@ -60,32 +76,44 @@ function writeToggles(next: Partial<TogglesState>): TogglesState {
   };
 
   inMemoryToggles = updated;
+  const jsonStr = JSON.stringify(updated, null, 2);
 
+  // Write to /tmp for persistent Vercel Lambda execution
+  try {
+    fs.writeFileSync(TMP_TOGGLES_FILE, jsonStr, 'utf8');
+  } catch (_) {}
+
+  // Write to local project config if filesystem is writable
   try {
     const dir = path.dirname(TOGGLES_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(TOGGLES_FILE, JSON.stringify(updated, null, 2), 'utf8');
+    fs.writeFileSync(TOGGLES_FILE, jsonStr, 'utf8');
   } catch (err) {
-    console.warn('Could not persist toggles to file:', err);
+    // Read-only filesystem in Vercel lambda container is normal
   }
 
-  // Also sync to Google Apps Script
+  // Also sync persistently to Google Apps Script PropertiesService
   const gasUrl =
     process.env.GAS_WEB_APP_URL ||
     process.env.VITE_GOOGLE_SCRIPT_URL ||
     'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec';
   if (gasUrl) {
-    fetch(gasUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'SET_TOGGLES',
-        registrationOpen: updated.registrationOpen,
-        accommodationOpen: updated.accommodationOpen,
-      }),
-    }).catch(err => console.warn('Could not sync toggles to Apps Script:', err));
+    try {
+      await fetch(gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'SET_TOGGLES',
+          registrationOpen: updated.registrationOpen,
+          accommodationOpen: updated.accommodationOpen,
+        }),
+        signal: AbortSignal.timeout(3500),
+      });
+    } catch (err) {
+      console.warn('Could not sync toggles to Apps Script:', err);
+    }
   }
 
   return updated;
@@ -165,6 +193,7 @@ export default async function handler(req: any, res: any) {
     const state = readToggles();
     return res.status(200).json({
       success: true,
+      settings: state,
       registrationOpen: state.registrationOpen,
       accommodationOpen: state.accommodationOpen,
       lastUpdated: state.lastUpdated,
@@ -191,7 +220,7 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const updated = writeToggles({
+    const updated = await writeToggles({
       registrationOpen: body.registrationOpen,
       accommodationOpen: body.accommodationOpen,
     });
@@ -199,6 +228,7 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({
       success: true,
       message: 'Form status updated successfully.',
+      settings: updated,
       registrationOpen: updated.registrationOpen,
       accommodationOpen: updated.accommodationOpen,
       lastUpdated: updated.lastUpdated,

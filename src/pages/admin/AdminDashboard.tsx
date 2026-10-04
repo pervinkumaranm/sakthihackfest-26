@@ -11,6 +11,7 @@ import {
   QrCode, Sliders, BedDouble, ShieldCheck, Copy, CheckCircle2
 } from 'lucide-react'
 import { apiService } from '../../services/api'
+import { useAppSettings } from '../../context/SettingsContext'
 import ParticipantPass from '../../components/ParticipantPass'
 import { timerService, type HackathonTimerState } from '../../services/timerService'
 import { winnerService, type WinnerAnnouncementState, type WinnerTeamRecord } from '../../services/winnerService'
@@ -33,6 +34,8 @@ interface TeamEvaluation {
 }
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
+  const { setLocalSettings } = useAppSettings()
+
   // Enforce noindex metadata on Admin Dashboard
   useEffect(() => {
     let meta = document.querySelector('meta[name="robots"]')
@@ -82,10 +85,21 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null)
 
   // System Form Toggles State
-  const [formSettings, setFormSettings] = useState<AppSettings>({
-    registrationOpen: true,
-    accommodationOpen: true,
-    lastUpdated: new Date().toISOString()
+  const [formSettings, setFormSettings] = useState<AppSettings>(() => {
+    try {
+      const cached = localStorage.getItem('shf26_app_settings')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (typeof parsed.accommodationOpen === 'boolean' && typeof parsed.registrationOpen === 'boolean') {
+          return parsed
+        }
+      }
+    } catch (_) {}
+    return {
+      registrationOpen: true,
+      accommodationOpen: true,
+      lastUpdated: new Date().toISOString()
+    }
   })
   const [savingSettings, setSavingSettings] = useState(false)
 
@@ -431,8 +445,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
       if (settingsRes.status === 'fulfilled') {
         const sVal = settingsRes.value
-        if (sVal && typeof sVal.registrationOpen === 'boolean') {
+        if (sVal && typeof sVal.registrationOpen === 'boolean' && typeof sVal.accommodationOpen === 'boolean') {
           setFormSettings(sVal)
+          setLocalSettings(sVal)
         }
       }
     } catch {
@@ -452,8 +467,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         [key]: updatedVal
       })
       if (res.success) {
-        const newSettings = res.settings || { ...formSettings, [key]: updatedVal }
+        const newSettings: AppSettings = {
+          registrationOpen: typeof res.registrationOpen === 'boolean' ? res.registrationOpen : (res.settings?.registrationOpen ?? formSettings.registrationOpen),
+          accommodationOpen: typeof res.accommodationOpen === 'boolean' ? res.accommodationOpen : (res.settings?.accommodationOpen ?? formSettings.accommodationOpen),
+          lastUpdated: res.lastUpdated || new Date().toISOString(),
+        }
+        if (key === 'accommodationOpen') {
+          newSettings.accommodationOpen = updatedVal
+        } else if (key === 'registrationOpen') {
+          newSettings.registrationOpen = updatedVal
+        }
         setFormSettings(newSettings)
+        setLocalSettings(newSettings)
         setActionFeedback({
           type: 'success',
           message: `${key === 'registrationOpen' ? 'Registration Form' : 'Accommodation Form'} is now ${updatedVal ? 'ENABLED (ON)' : 'DISABLED (OFF)'}`

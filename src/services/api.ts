@@ -901,19 +901,59 @@ export const apiService = {
 
   // ── Form Toggles Management ───────────────────────────────────────────────
   async getFormSettings(): Promise<AppSettings> {
+    let localCached: AppSettings | null = null
+    try {
+      const cachedStr = localStorage.getItem('shf26_app_settings')
+      if (cachedStr) {
+        const parsed = JSON.parse(cachedStr)
+        if (typeof parsed.accommodationOpen === 'boolean' && typeof parsed.registrationOpen === 'boolean') {
+          localCached = parsed
+        }
+      }
+    } catch (_) {}
+
     try {
       const res = await fetch('/api/settings')
       if (res.ok) {
         const json = await res.json()
         if (json.success) {
-          return {
-            registrationOpen: json.registrationOpen,
-            accommodationOpen: json.accommodationOpen,
-            lastUpdated: json.lastUpdated,
+          const settings: AppSettings = {
+            registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : (json.settings?.registrationOpen ?? !IS_REGISTRATION_CLOSED),
+            accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : (json.settings?.accommodationOpen ?? true),
+            lastUpdated: json.lastUpdated || json.settings?.lastUpdated || new Date().toISOString(),
           }
+          try {
+            localStorage.setItem('shf26_app_settings', JSON.stringify(settings))
+          } catch (_) {}
+          return settings
         }
       }
     } catch (_) {}
+
+    // Fallback: If /api/settings is unreachable, try direct Google Apps Script GET_TOGGLES
+    try {
+      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_TOGGLES`, {
+        signal: AbortSignal.timeout(3500),
+      })
+      if (gasRes.ok) {
+        const gasJson = await gasRes.json()
+        if (gasJson.success) {
+          const settings: AppSettings = {
+            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : true,
+            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : true,
+            lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
+          }
+          try {
+            localStorage.setItem('shf26_app_settings', JSON.stringify(settings))
+          } catch (_) {}
+          return settings
+        }
+      }
+    } catch (_) {}
+
+    if (localCached) {
+      return localCached
+    }
 
     return {
       registrationOpen: !IS_REGISTRATION_CLOSED,
@@ -921,7 +961,7 @@ export const apiService = {
     }
   },
 
-  async updateFormSettings(settings: { registrationOpen?: boolean; accommodationOpen?: boolean }): Promise<ApiResponse & { settings?: AppSettings }> {
+  async updateFormSettings(settings: { registrationOpen?: boolean; accommodationOpen?: boolean }): Promise<ApiResponse & { settings?: AppSettings; registrationOpen?: boolean; accommodationOpen?: boolean; lastUpdated?: string }> {
     const token = localStorage.getItem('shf26_admin_token') || sessionStorage.getItem('shf26_admin_token')
     try {
       const res = await fetch('/api/settings', {
@@ -934,10 +974,89 @@ export const apiService = {
       })
       const json = await res.json()
       if (json && json.success) {
-        window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: json }))
+        const updatedSettings: AppSettings = {
+          registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : (json.settings?.registrationOpen ?? (settings.registrationOpen !== undefined ? settings.registrationOpen : true)),
+          accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : (json.settings?.accommodationOpen ?? (settings.accommodationOpen !== undefined ? settings.accommodationOpen : true)),
+          lastUpdated: json.lastUpdated || new Date().toISOString(),
+        }
+        try {
+          localStorage.setItem('shf26_app_settings', JSON.stringify(updatedSettings))
+        } catch (_) {}
+        window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: updatedSettings }))
+        return {
+          ...json,
+          settings: updatedSettings,
+          registrationOpen: updatedSettings.registrationOpen,
+          accommodationOpen: updatedSettings.accommodationOpen,
+        }
       }
+
+      // If /api/settings returned failure (e.g. auth issue on Vercel), attempt direct GAS sync as resilient fallback
+      try {
+        const gasRes = await fetch(DEFAULT_GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'SET_TOGGLES',
+            registrationOpen: settings.registrationOpen,
+            accommodationOpen: settings.accommodationOpen,
+          }),
+          signal: AbortSignal.timeout(4000),
+        })
+        const gasJson = await gasRes.json()
+        if (gasJson && gasJson.success) {
+          const updatedSettings: AppSettings = {
+            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : (settings.registrationOpen !== undefined ? settings.registrationOpen : true),
+            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : (settings.accommodationOpen !== undefined ? settings.accommodationOpen : true),
+            lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
+          }
+          try {
+            localStorage.setItem('shf26_app_settings', JSON.stringify(updatedSettings))
+          } catch (_) {}
+          window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: updatedSettings }))
+          return {
+            success: true,
+            settings: updatedSettings,
+            registrationOpen: updatedSettings.registrationOpen,
+            accommodationOpen: updatedSettings.accommodationOpen,
+          }
+        }
+      } catch (_) {}
+
       return json
     } catch (e: any) {
+      // Network error to /api/settings, try direct GAS
+      try {
+        const gasRes = await fetch(DEFAULT_GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'SET_TOGGLES',
+            registrationOpen: settings.registrationOpen,
+            accommodationOpen: settings.accommodationOpen,
+          }),
+          signal: AbortSignal.timeout(4000),
+        })
+        const gasJson = await gasRes.json()
+        if (gasJson && gasJson.success) {
+          const updatedSettings: AppSettings = {
+            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : (settings.registrationOpen !== undefined ? settings.registrationOpen : true),
+            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : (settings.accommodationOpen !== undefined ? settings.accommodationOpen : true),
+            lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
+          }
+          try {
+            localStorage.setItem('shf26_app_settings', JSON.stringify(updatedSettings))
+          } catch (_) {}
+          window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: updatedSettings }))
+          return {
+            success: true,
+            settings: updatedSettings,
+            registrationOpen: updatedSettings.registrationOpen,
+            accommodationOpen: updatedSettings.accommodationOpen,
+          }
+        }
+      } catch (_) {}
+
       return { success: false, error: e.message || 'Failed to update form settings.' }
     }
   },

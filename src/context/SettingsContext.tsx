@@ -24,18 +24,32 @@ const SettingsContext = createContext<SettingsContextValue>({
 })
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>({
-    registrationOpen: defaultRegistrationOpen,
-    accommodationOpen: true,
-    lastUpdated: new Date().toISOString(),
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const cached = localStorage.getItem('shf26_app_settings')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (typeof parsed.accommodationOpen === 'boolean' && typeof parsed.registrationOpen === 'boolean') {
+          return parsed
+        }
+      }
+    } catch (_) {}
+    return {
+      registrationOpen: defaultRegistrationOpen,
+      accommodationOpen: true,
+      lastUpdated: new Date().toISOString(),
+    }
   })
   const [loading, setLoading] = useState(true)
 
   const fetchLiveSettings = useCallback(async () => {
     try {
       const res = await apiService.getFormSettings()
-      if (res && typeof res.registrationOpen === 'boolean') {
+      if (res && typeof res.registrationOpen === 'boolean' && typeof res.accommodationOpen === 'boolean') {
         setSettings(res)
+        try {
+          localStorage.setItem('shf26_app_settings', JSON.stringify(res))
+        } catch (_) {}
       }
     } catch (err) {
       console.warn('Could not fetch live form settings:', err)
@@ -50,7 +64,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     // Listen to custom cross-component update events (fired when Admin toggles a setting)
     const handleUpdate = (e: CustomEvent<AppSettings>) => {
       if (e.detail) {
-        setSettings((prev: AppSettings) => ({ ...prev, ...e.detail }))
+        setSettings((prev: AppSettings) => {
+          const updated = { ...prev, ...e.detail }
+          try {
+            localStorage.setItem('shf26_app_settings', JSON.stringify(updated))
+          } catch (_) {}
+          return updated
+        })
       }
     }
 
@@ -67,7 +87,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [fetchLiveSettings])
 
   const setLocalSettings = useCallback((next: Partial<AppSettings>) => {
-    setSettings((prev: AppSettings) => ({ ...prev, ...next }))
+    setSettings((prev: AppSettings) => {
+      const updated = { ...prev, ...next }
+      try {
+        localStorage.setItem('shf26_app_settings', JSON.stringify(updated))
+      } catch (_) {}
+      return updated
+    })
   }, [])
 
   return (

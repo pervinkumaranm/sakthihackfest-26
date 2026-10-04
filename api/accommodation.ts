@@ -99,6 +99,13 @@ function verifyAdminToken(token?: string): boolean {
 
 function isAccommodationOpen(): boolean {
   try {
+    const tmpFile = '/tmp/toggles.json';
+    if (fs.existsSync(tmpFile)) {
+      const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
+      if (typeof parsed.accommodationOpen === 'boolean') {
+        return parsed.accommodationOpen;
+      }
+    }
     if (fs.existsSync(TOGGLES_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(TOGGLES_FILE, 'utf8'));
       if (typeof parsed.accommodationOpen === 'boolean') {
