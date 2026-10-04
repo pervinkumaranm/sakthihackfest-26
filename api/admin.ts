@@ -56,7 +56,7 @@ function loadLocalEnvIfNeeded() {
 }
 
 const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec';
+  'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec';
 
 function getActiveGasUrl(): string {
   loadLocalEnvIfNeeded();

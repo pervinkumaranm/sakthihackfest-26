@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, Upload, CheckCircle2, AlertCircle,
   Loader2, ShieldCheck, RefreshCw, Trash2,
   Users, Phone, Mail, FileText, ArrowRight, User,
-  Sparkles, Globe, Palette, Coins, Lock, X
+  Sparkles, Globe, Palette, Coins, Lock, X, ExternalLink
 } from 'lucide-react'
 import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/eventConfig'
 import { registrationFormSchema, RegistrationFormValues, ACADEMIC_YEARS } from '../../config/registrationSchema'
@@ -53,6 +53,7 @@ export default function Register() {
   const [registeredCount, setRegisteredCount] = useState<number | null>(null)
   const [showClosedModal, setShowClosedModal] = useState(IS_REGISTRATION_CLOSED)
   const [checkingStatus, setCheckingStatus] = useState(true)
+  const [showQrModal, setShowQrModal] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -121,19 +122,17 @@ export default function Register() {
     let active = true
     const verifyRegistrationLimit = async () => {
       try {
-        const status = await apiService.getRegistrationStatus()
-        if (active && status) {
-          if (typeof status.count === 'number') {
+        const [status, settings] = await Promise.all([
+          apiService.getRegistrationStatus().catch(() => null),
+          apiService.getFormSettings().catch(() => null),
+        ])
+        if (active) {
+          if (status && typeof status.count === 'number') {
             setRegisteredCount(status.count)
           }
-          // IS_REGISTRATION_CLOSED is the master authority for closing registration
-          if (IS_REGISTRATION_CLOSED) {
-            setIsRegistrationClosed(true)
-            setShowClosedModal(true)
-          } else {
-            setIsRegistrationClosed(false)
-            setShowClosedModal(false)
-          }
+          const closed = settings ? !settings.registrationOpen : IS_REGISTRATION_CLOSED
+          setIsRegistrationClosed(closed)
+          setShowClosedModal(closed)
         }
       } catch (err) {
         console.warn('Could not verify registration limit on load:', err)
@@ -239,9 +238,8 @@ export default function Register() {
     // Prevent double submission
     if (submitting) return
 
-    // Strict registration limit guard governed by IS_REGISTRATION_CLOSED toggle
-    if (IS_REGISTRATION_CLOSED) {
-      setIsRegistrationClosed(true)
+    // Strict registration limit guard governed by live toggle
+    if (isRegistrationClosed) {
       setShowClosedModal(true)
       return
     }
@@ -930,7 +928,8 @@ export default function Register() {
                         <img
                           src={EVENT_CONFIG.publicPaymentQrUrl}
                           alt="Official Payment QR Code"
-                          className="w-44 h-44 sm:w-52 sm:h-52 object-contain"
+                          style={{ imageRendering: 'pixelated' }}
+                          className="w-56 sm:w-60 max-w-[250px] h-auto aspect-[909/854] object-contain block mx-auto"
                         />
                       </div>
                       <div className="mt-3 text-center">
@@ -943,6 +942,13 @@ export default function Register() {
                         <div className="font-mono text-xs text-brand-orange mt-2 bg-brand-orange/10 border border-brand-orange/30 px-3 py-1.5 rounded-md font-bold tracking-wide">
                           QR Name : {EVENT_CONFIG.paymentQRName}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowQrModal(true)}
+                          className="mt-2 text-[11px] font-mono text-cyan-400 hover:text-cyan-300 underline flex items-center justify-center gap-1 mx-auto"
+                        >
+                          <ExternalLink size={12} /> View Full-Size QR
+                        </button>
                       </div>
                     </div>
 
@@ -1338,6 +1344,55 @@ export default function Register() {
                 >
                   DISMISS
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL: FULL SIZE QR VIEW ────────────────────────────────────── */}
+      <AnimatePresence>
+        {showQrModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-brand-surface border border-brand-border rounded-2xl p-6 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-brand-border">
+                <h3 className="font-display font-bold text-white text-base">OFFICIAL PAYMENT QR</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowQrModal(false)}
+                  className="font-mono text-xs text-brand-muted hover:text-white"
+                >
+                  Close [×]
+                </button>
+              </div>
+
+              <div className="p-4 bg-white rounded-xl shadow-lg flex justify-center mb-4">
+                <img
+                  src={EVENT_CONFIG.publicPaymentQrUrl}
+                  alt="Full-size Payment QR Code"
+                  style={{ imageRendering: 'pixelated' }}
+                  className="w-72 h-auto aspect-[909/854] object-contain"
+                />
+              </div>
+
+              <div className="text-center font-mono text-xs text-brand-muted">
+                <div className="text-white font-bold">{EVENT_CONFIG.paymentQRName}</div>
+                <div className="text-[11px] mt-1 text-emerald-400">Scan directly or download image to your phone</div>
+              </div>
+
+              <div className="mt-4 flex justify-center">
+                <a
+                  href={EVENT_CONFIG.publicPaymentQrUrl}
+                  download="Sakthi_HackFest_Payment_QR.png"
+                  className="py-2 px-5 bg-brand-primary text-white text-xs font-mono font-bold rounded-xl"
+                >
+                  Download QR Image
+                </a>
               </div>
             </motion.div>
           </div>

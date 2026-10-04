@@ -79,10 +79,43 @@ export interface ApiResponse<T = unknown> {
   message?: string
   stage?: string
   registrationId?: string
+  accommodationId?: string
   emailStatus?: EmailStatus
   paymentStatus?: string
   errorCode?: string
   isDuplicate?: boolean
   data?: T
   error?: string
+}
+
+export type AccommodationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED'
+
+export interface StoredAccommodation {
+  accommodationId: string
+  timestamp: string
+  teamName: string
+  teamCode: string
+  registeredTeamSize: number
+  selectedMembers: string[]
+  memberCount: number
+  numberOfMembers?: number
+  ratePerMember: number
+  totalAmount: number
+  upiTransactionId: string
+  paymentScreenshotDriveUrl?: string
+  driveFileId?: string
+  paymentScreenshotData?: string
+  paymentScreenshotName?: string
+  teamLeaderName?: string
+  teamLeaderEmail: string
+  emailStatus: EmailStatus
+  accommodationStatus: AccommodationStatus
+  rejectionReason?: string
+  lastUpdated?: string
+}
+
+export interface AppSettings {
+  registrationOpen: boolean
+  accommodationOpen: boolean
+  lastUpdated?: string
 }

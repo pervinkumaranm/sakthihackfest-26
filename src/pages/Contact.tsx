@@ -103,21 +103,6 @@ export default function Contact() {
               </div>
             </div>
 
-            <div className="p-6 border border-brand-border bg-brand-card">
-              <h2 className="font-display font-bold text-lg text-white mb-5">FACULTY COORDINATORS</h2>
-              <div className="space-y-4">
-                {EVENT_CONFIG.contact.facultyCoordinators.map((coord, i) => (
-                  <div key={i} className="flex items-start justify-between border-b border-brand-border pb-4 last:border-0 last:pb-0">
-                    <div>
-                      <div className="text-white text-sm font-medium">{coord.name}</div>
-                      <div className="font-mono text-xs text-brand-muted mt-0.5">{coord.department}</div>
-                    </div>
-                    <a href={`tel:${coord.phone}`} className="text-brand-primary text-sm hover:underline font-mono">{coord.phone}</a>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="p-5 border border-brand-primary/30 bg-brand-primary/5">
               <p className="font-mono text-xs text-brand-muted leading-relaxed">
                 For urgent event queries, WhatsApp or call the student coordinators directly.

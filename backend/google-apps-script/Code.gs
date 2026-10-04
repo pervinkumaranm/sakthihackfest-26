@@ -86,11 +86,37 @@ function doPost(e) {
     const action = body.action || "SUBMIT_REGISTRATION";
 
     if (action === "RETRY_EMAIL") {
+      if (body.accommodationId && typeof handleAccommodationRetryEmail === "function") {
+        return (typeof accomJsonResponse === "function" ? accomJsonResponse : jsonResponse)(handleAccommodationRetryEmail(body.accommodationId));
+      }
       return handleRetryEmail(body.registrationId);
     }
 
     if (action === "UPDATE_STATUS") {
+      if ((body.type === "accommodation" || body.accommodationId) && typeof handleUpdateStatus === "function") {
+        return (typeof accomJsonResponse === "function" ? accomJsonResponse : jsonResponse)(handleUpdateStatus(body));
+      }
       return handleStatusUpdate(body);
+    }
+
+    if (action === "SUBMIT_ACCOMMODATION" && typeof handleAccommodationSubmission === "function") {
+      return handleAccommodationSubmission(body.data || body);
+    }
+
+    if (action === "GET_TEAMS" && typeof handleGetRegisteredTeams === "function") {
+      return handleGetRegisteredTeams();
+    }
+
+    if (action === "GET_TEAM_MEMBERS" && typeof handleGetTeamMembers === "function") {
+      return handleGetTeamMembers(body.teamCode || (e && e.parameter && e.parameter.teamCode));
+    }
+
+    if (action === "GET_TOGGLES" && typeof getFormToggles === "function") {
+      return (typeof accomJsonResponse === "function" ? accomJsonResponse : jsonResponse)(getFormToggles());
+    }
+
+    if (action === "SET_TOGGLES" && typeof setFormToggles === "function") {
+      return (typeof accomJsonResponse === "function" ? accomJsonResponse : jsonResponse)(setFormToggles(body));
     }
 
     return handleRegistrationSubmission(body.data || body);
@@ -147,6 +173,22 @@ function doGet(e) {
     if (action === "TEST_WRITE") {
       testSheetWrite();
       return buildJsonResponse({ success: true, message: "testSheetWrite executed successfully." });
+    }
+    if (action === "GET_ACCOMMODATIONS" && typeof handleGetAccommodations === "function") {
+      return handleGetAccommodations();
+    }
+
+    if (action === "GET_TEAMS" && typeof handleGetRegisteredTeams === "function") {
+      return handleGetRegisteredTeams();
+    }
+
+    if (action === "GET_TEAM_MEMBERS" && typeof handleGetTeamMembers === "function") {
+      const teamCode = (e && e.parameter && e.parameter.teamCode) || "";
+      return handleGetTeamMembers(teamCode);
+    }
+
+    if (action === "GET_TOGGLES" && typeof getFormToggles === "function") {
+      return (typeof accomJsonResponse === "function" ? accomJsonResponse : buildJsonResponse)(getFormToggles());
     }
 
     const sheet = getOrCreateRegistrationSheet();

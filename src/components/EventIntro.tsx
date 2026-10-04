@@ -2,13 +2,17 @@ import { useRef, useEffect, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { EVENT_CONFIG } from '../../config/event'
 import { apiService } from '../services/api'
+import { useAppSettings } from '../context/SettingsContext'
 
 export default function EventIntro() {
+  const { registrationOpen } = useAppSettings()
   const ref = useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { once: true, margin: '-100px' })
   const [registeredTeamsCount, setRegisteredTeamsCount] = useState<number | null>(null)
 
   useEffect(() => {
+    if (!registrationOpen) return
+
     let active = true
     const fetchRegisteredCount = async () => {
       try {
@@ -26,7 +30,7 @@ export default function EventIntro() {
       active = false
       clearInterval(timer)
     }
-  }, [])
+  }, [registrationOpen])
 
   const stats = EVENT_CONFIG.stats
 
@@ -112,7 +116,7 @@ export default function EventIntro() {
                   {stat.sublabel && (
                     <div className="font-mono text-[10px] text-brand-primary tracking-widest mt-1">{stat.sublabel}</div>
                   )}
-                  {isTeamsCard && (
+                  {isTeamsCard && registrationOpen && (
                     <div className="font-mono text-[11px] sm:text-xs text-brand-primary font-bold tracking-wider mt-2.5 pt-2 border-t border-brand-border/60 flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse shrink-0" />
                       <span>

@@ -38,7 +38,7 @@ Direct URL:
 4. Under **Version**, click the dropdown and choose **New version**.
 5. Click **Deploy**.
 6. Your Active Web App URL:  
-   `https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec`
+   `https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec`
 
 ---
 
@@ -231,3 +231,43 @@ In `Code.gs`, `sendConfirmationEmail(data)` specifically passes `to: data.leader
 
 ### 4. What if email delivery fails for a participant?
 The registration is **NEVER lost**. It is saved in Google Sheets with `Email Status = FAILED`. You can go to `/admin` in the web application and click **RESEND CONFIRMATION EMAIL** to retry delivery at any time.
+
+---
+
+## 🏨 Accommodation Apps Script Setup & Fix Guide
+
+### ⚠️ Why did `SyntaxError: Identifier 'CONFIG' has already been declared` happen?
+In Google Apps Script, **all `.gs` files in the same project share one single global execution scope**.
+- If `Code.gs` already declares `const CONFIG = { ... }`, adding `AccommodationCode.gs` (or `AccomadationConfig.gs`) with `const CONFIG = { ... }` causes Google Apps Script V8 engine to immediately throw:
+  `SyntaxError: Identifier 'CONFIG' has already been declared`
+- Furthermore, an unescaped single quote in the email template font-family caused a syntax error in the Apps Script editor.
+
+### ✅ What was fixed:
+1. **Renamed Configuration to `ACCOMMODATION_CONFIG`**:
+   - `CONFIG` $\rightarrow$ `ACCOMMODATION_CONFIG` (and declared with `var`, preventing redeclaration errors).
+   - All references in `AccommodationCode.gs` updated to `ACCOMMODATION_CONFIG`.
+2. **Fixed Syntax in Email HTML**:
+   - Removed unescaped single quotes from `'Segoe UI'` and `'26'` in HTML string concatenation.
+3. **Collision-Safe Architecture**:
+   - `SSEC_LOGO_BASE64` renamed to `ACCOM_SSEC_LOGO_BASE64` with fallback to reuse existing logo if co-located.
+   - Helper functions namespaced (`accomJsonResponse`, `accomFormatTimestamp`, `accomEscapeHtml`, `handleAccommodationRetryEmail`).
+4. **Smart Coexistence Router**:
+   - `doPost` and `doGet` now automatically delegate between registration and accommodation actions whether placed in the **same project** or a **dedicated separate project**.
+
+### 📋 Two Supported Deployment Options:
+
+#### Option 1: Dedicated Accommodation Project (Recommended)
+1. Go to [script.google.com](https://script.google.com) while logged in as `sakthihackfest@gmail.com`.
+2. Click **New project** and name it `Sakthi Hackfest 26 Accommodation Backend`.
+3. In `Code.gs`, paste the contents of [`backend/google-apps-script/AccommodationCode.gs`](file:///home/z3r0_byt3/sakthihackfest-26/backend/google-apps-script/AccommodationCode.gs).
+4. Click **Deploy** > **New deployment** > Type: **Web app** > Execute as: **Me** > Who has access: **Anyone**.
+5. Copy the Web App URL and add it to your environment as `ACCOMMODATION_GAS_URL`.
+
+#### Option 2: Same Project (`SAKTHI HACKFEST 2K26 Backend`)
+If you prefer having both in the same project:
+1. Open your existing project: `https://script.google.com/u/0/home/projects/1LZjRe9_aA7axqAYIAAtcO7oAMPmthrRyaYBruFaemll-BCK8s4DoYpdH/edit`
+2. Update `Code.gs` with the latest [`backend/google-apps-script/Code.gs`](file:///home/z3r0_byt3/sakthihackfest-26/backend/google-apps-script/Code.gs).
+3. Add a file named `AccommodationCode.gs` and paste [`backend/google-apps-script/AccommodationCode.gs`](file:///home/z3r0_byt3/sakthihackfest-26/backend/google-apps-script/AccommodationCode.gs).
+4. (Optional) If you have `AccomadationConfig.gs`, paste [`backend/google-apps-script/AccomadationConfig.gs`](file:///home/z3r0_byt3/sakthihackfest-26/backend/google-apps-script/AccomadationConfig.gs) or simply delete that file since `AccommodationCode.gs` already contains the full configuration.
+5. Deploy a **New version** under **Manage deployments**.
+

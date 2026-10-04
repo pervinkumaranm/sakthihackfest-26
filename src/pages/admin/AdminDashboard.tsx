@@ -8,13 +8,13 @@ import {
   Building, Phone, Calendar, UserCheck, ShieldAlert, FileText, CheckSquare,
   Trophy, Medal, Award, Timer, Flame, GraduationCap, Star, Sparkles, TrendingUp, BarChart3,
   Play, Pause, Square, RotateCcw, Megaphone, MonitorPlay, Plus, Bell, Volume2, Tv, Radio, Crown,
-  QrCode
+  QrCode, Sliders, BedDouble, ShieldCheck, Copy, CheckCircle2
 } from 'lucide-react'
 import { apiService } from '../../services/api'
 import ParticipantPass from '../../components/ParticipantPass'
 import { timerService, type HackathonTimerState } from '../../services/timerService'
 import { winnerService, type WinnerAnnouncementState, type WinnerTeamRecord } from '../../services/winnerService'
-import type { StoredRegistration, AdminStats, PaymentStatus, RegistrationStatus } from '../../types'
+import type { StoredRegistration, AdminStats, PaymentStatus, RegistrationStatus, StoredAccommodation, AccommodationStatus, AppSettings } from '../../types'
 import { HACKATHON_DOMAINS } from '../../../config/registrationSchema'
 import { eventConfig } from '../../../config/eventConfig'
 
@@ -70,6 +70,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [deletingReg, setDeletingReg] = useState<StoredRegistration | null>(null)
   const [verifyingReg, setVerifyingReg] = useState<StoredRegistration | null>(null)
   const [passReg, setPassReg] = useState<StoredRegistration | null>(null)
+
+  // Accommodation State
+  const [accommodations, setAccommodations] = useState<StoredAccommodation[]>([])
+  const [accommodationSearchTerm, setAccommodationSearchTerm] = useState('')
+  const [accommodationStatusFilter, setAccommodationStatusFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('ALL')
+  const [selectedAccommodation, setSelectedAccommodation] = useState<StoredAccommodation | null>(null)
+  const [verifyingAccommodation, setVerifyingAccommodation] = useState<StoredAccommodation | null>(null)
+  const [rejectingAccommodation, setRejectingAccommodation] = useState<StoredAccommodation | null>(null)
+  const [accommodationRejectionReason, setAccommodationRejectionReason] = useState('')
+  const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null)
+
+  // System Form Toggles State
+  const [formSettings, setFormSettings] = useState<AppSettings>({
+    registrationOpen: true,
+    accommodationOpen: true,
+    lastUpdated: new Date().toISOString()
+  })
+  const [savingSettings, setSavingSettings] = useState(false)
 
   // Evaluation & Scoring State (stored locally per team)
   const [evaluations, setEvaluations] = useState<Record<string, TeamEvaluation>>(() => {
@@ -364,43 +382,223 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   }, [evaluations])
 
-  // Load Registrations from real backend
+  // Load Registrations, Accommodations, and Form Settings
   const loadData = async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true)
     else setLoading(true)
     setError(null)
 
     try {
-      const res = await apiService.getRegistrations()
-      if (res.error && res.registrations.length === 0) {
-        setError(res.error)
-      } else {
-        setRegistrations(res.registrations)
-        if (res.stats) {
-          setStats(res.stats)
+      const [regRes, accomRes, settingsRes] = await Promise.allSettled([
+        apiService.getRegistrations(),
+        apiService.getAccommodations(),
+        apiService.getFormSettings()
+      ])
+
+      if (regRes.status === 'fulfilled') {
+        const res = regRes.value
+        if (res.error && res.registrations.length === 0) {
+          setError(res.error)
         } else {
-          const list = res.registrations
-          setStats({
-            totalRegistrations: list.length,
-            totalTeams: list.length,
-            totalParticipants: list.reduce((sum, r) => sum + (r.teamSize || 2), 0),
-            paymentSubmitted: list.filter(r => Boolean(r.upiTransactionId && r.upiTransactionId.length > 2)).length,
-            paymentPending: list.filter(r => r.paymentStatus === 'PENDING').length,
-            verifiedCount: list.filter(r => r.paymentStatus === 'VERIFIED').length,
-            rejectedCount: list.filter(r => r.paymentStatus === 'REJECTED').length,
-            accommodationCount: list.filter(r => r.accommodationRequired === 'Yes').length as any,
-            emailSentCount: list.filter(r => r.emailStatus === 'SENT').length,
-            emailFailedCount: list.filter(r => r.emailStatus === 'FAILED').length,
-            dailyTrends: [],
-          })
+          setRegistrations(res.registrations)
+          if (res.stats) {
+            setStats(res.stats)
+          } else {
+            const list = res.registrations
+            setStats({
+              totalRegistrations: list.length,
+              totalTeams: list.length,
+              totalParticipants: list.reduce((sum, r) => sum + (r.teamSize || 2), 0),
+              paymentSubmitted: list.filter(r => Boolean(r.upiTransactionId && r.upiTransactionId.length > 2)).length,
+              paymentPending: list.filter(r => r.paymentStatus === 'PENDING').length,
+              verifiedCount: list.filter(r => r.paymentStatus === 'VERIFIED').length,
+              rejectedCount: list.filter(r => r.paymentStatus === 'REJECTED').length,
+              accommodationCount: list.filter(r => r.accommodationRequired === 'Yes').length as any,
+              emailSentCount: list.filter(r => r.emailStatus === 'SENT').length,
+              emailFailedCount: list.filter(r => r.emailStatus === 'FAILED').length,
+              dailyTrends: [],
+            })
+          }
+        }
+      }
+
+      if (accomRes.status === 'fulfilled') {
+        const aList = accomRes.value
+        if (Array.isArray(aList)) {
+          setAccommodations(aList)
+        }
+      }
+
+      if (settingsRes.status === 'fulfilled') {
+        const sVal = settingsRes.value
+        if (sVal && typeof sVal.registrationOpen === 'boolean') {
+          setFormSettings(sVal)
         }
       }
     } catch {
-      setError('Unable to load registration data. Please try again.')
+      setError('Unable to load registration and accommodation data. Please try again.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
+  }
+
+  // Toggle Form Handler
+  const handleToggleForm = async (key: 'registrationOpen' | 'accommodationOpen') => {
+    const updatedVal = !formSettings[key]
+    setSavingSettings(true)
+    try {
+      const res = await apiService.updateFormSettings({
+        [key]: updatedVal
+      })
+      if (res.success) {
+        const newSettings = res.settings || { ...formSettings, [key]: updatedVal }
+        setFormSettings(newSettings)
+        setActionFeedback({
+          type: 'success',
+          message: `${key === 'registrationOpen' ? 'Registration Form' : 'Accommodation Form'} is now ${updatedVal ? 'ENABLED (ON)' : 'DISABLED (OFF)'}`
+        })
+      } else {
+        setActionFeedback({
+          type: 'error',
+          message: res.error || 'Failed to update setting'
+        })
+      }
+    } catch (e: any) {
+      setActionFeedback({
+        type: 'error',
+        message: e?.message || 'Error updating toggle setting'
+      })
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  // Accommodation Status Update Handler
+  const handleUpdateAccommodationStatus = async (
+    id: string,
+    status: 'VERIFIED' | 'REJECTED' | 'PENDING',
+    reason?: string
+  ) => {
+    setActionLoading(true)
+    try {
+      const res = await apiService.updateAccommodationStatus(id, status, reason)
+      if (res.success) {
+        setAccommodations(prev =>
+          prev.map(a => (a.accommodationId === id ? { ...a, accommodationStatus: status, rejectionReason: reason } : a))
+        )
+        if (selectedAccommodation?.accommodationId === id) {
+          setSelectedAccommodation(prev => prev ? { ...prev, accommodationStatus: status, rejectionReason: reason } : null)
+        }
+        setVerifyingAccommodation(null)
+        setRejectingAccommodation(null)
+        setAccommodationRejectionReason('')
+        setActionFeedback({
+          type: 'success',
+          message: `Accommodation request ${id} updated to ${status}`
+        })
+      } else {
+        setActionFeedback({
+          type: 'error',
+          message: res.error || 'Failed to update accommodation status'
+        })
+      }
+    } catch (e: any) {
+      setActionFeedback({
+        type: 'error',
+        message: e?.message || 'Network error updating accommodation status'
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Accommodation Statistics Memo
+  const accommodationStats = useMemo(() => {
+    const totalRequests = accommodations.length
+    const totalMembers = accommodations.reduce((sum, a) => sum + (a.numberOfMembers || a.selectedMembers?.length || 0), 0)
+    const totalAmount = accommodations.reduce((sum, a) => sum + (a.totalAmount || 0), 0)
+    const verifiedCount = accommodations.filter(a => a.accommodationStatus === 'VERIFIED').length
+    const pendingCount = accommodations.filter(a => a.accommodationStatus === 'PENDING' || !a.accommodationStatus).length
+    const rejectedCount = accommodations.filter(a => a.accommodationStatus === 'REJECTED').length
+
+    return {
+      totalRequests,
+      totalMembers,
+      totalAmount,
+      verifiedCount,
+      pendingCount,
+      rejectedCount
+    }
+  }, [accommodations])
+
+  // Filtered Accommodations Memo
+  const filteredAccommodations = useMemo(() => {
+    return accommodations.filter(a => {
+      if (accommodationStatusFilter !== 'ALL') {
+        const s = a.accommodationStatus || 'PENDING'
+        if (s !== accommodationStatusFilter) return false
+      }
+      if (accommodationSearchTerm.trim()) {
+        const q = accommodationSearchTerm.toLowerCase().trim()
+        const matchId = a.accommodationId?.toLowerCase().includes(q)
+        const matchTeam = a.teamName?.toLowerCase().includes(q)
+        const matchCode = a.teamCode?.toLowerCase().includes(q)
+        const matchEmail = a.teamLeaderEmail?.toLowerCase().includes(q)
+        const matchUpi = a.upiTransactionId?.toLowerCase().includes(q)
+        const matchMember = a.selectedMembers?.some(m => m.toLowerCase().includes(q))
+        if (!matchId && !matchTeam && !matchCode && !matchEmail && !matchUpi && !matchMember) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [accommodations, accommodationStatusFilter, accommodationSearchTerm])
+
+  // Export Accommodations to CSV
+  const exportAccommodations = () => {
+    const headers = [
+      'Accommodation ID',
+      'Timestamp',
+      'Team Name',
+      'Team Code',
+      'Registered Team Size',
+      'Selected Members',
+      'Number of Members',
+      'Rate Per Member',
+      'Total Amount',
+      'UPI Transaction ID',
+      'Team Leader Email',
+      'Accommodation Status',
+      'Email Status',
+      'Payment Screenshot URL'
+    ]
+
+    const rows = filteredAccommodations.map(a => [
+      a.accommodationId,
+      a.timestamp,
+      `"${(a.teamName || '').replace(/"/g, '""')}"`,
+      a.teamCode,
+      a.registeredTeamSize || '',
+      `"${(a.selectedMembers || []).join(', ').replace(/"/g, '""')}"`,
+      a.numberOfMembers,
+      a.ratePerMember || 100,
+      a.totalAmount,
+      `'${a.upiTransactionId || ''}`,
+      a.teamLeaderEmail || '',
+      a.accommodationStatus || 'PENDING',
+      a.emailStatus || 'PENDING',
+      a.paymentScreenshotDriveUrl || ''
+    ])
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `SHF26_Accommodations_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   useEffect(() => {
@@ -741,12 +939,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 PAYMENT STATUS
               </button>
               <button
-                onClick={() => { setActiveTab('accommodation'); setFilterAccommodation('Yes'); }}
+                onClick={() => { setActiveTab('accommodation'); }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
                   activeTab === 'accommodation' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
                 }`}
               >
+                <BedDouble size={13} />
                 ACCOMMODATION
+                {accommodations.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/30 text-purple-300 font-bold ml-1">
+                    {accommodations.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => { setActiveTab('leaderboard'); }}
@@ -821,12 +1025,17 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               Payments
             </button>
             <button
-              onClick={() => { setActiveTab('accommodation'); setFilterAccommodation('Yes'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${
+              onClick={() => { setActiveTab('accommodation'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${
                 activeTab === 'accommodation' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
               }`}
             >
-              Accommodation
+              <BedDouble size={12} /> Accommodation
+              {accommodations.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-purple-500/30 text-purple-300 font-bold ml-0.5">
+                  {accommodations.length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => { setActiveTab('leaderboard'); }}
@@ -889,6 +1098,97 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </button>
           </div>
         )}
+
+        {/* ── SECTION: LIVE SYSTEM FORM TOGGLES (Persistent Admin Controls) ── */}
+        <section className="bg-brand-surface border border-brand-border rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand-primary/10 border border-brand-primary/30 flex items-center justify-center text-brand-primary flex-shrink-0">
+                <Sliders className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                    PORTAL REGISTRATION CONTROLS
+                  </h3>
+                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    PERSISTENT LIVE SETTINGS
+                  </span>
+                </div>
+                <p className="text-xs text-brand-muted font-mono mt-0.5">
+                  Enable or disable registration portals in real time without git commits or redeployments.
+                </p>
+              </div>
+            </div>
+
+            {/* The Two Toggles */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:min-w-[480px]">
+              {/* 1. Registration Form Toggle */}
+              <div className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                formSettings.registrationOpen
+                  ? 'bg-green-500/10 border-green-500/30 text-white'
+                  : 'bg-red-500/10 border-red-500/30 text-brand-muted'
+              }`}>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${formSettings.registrationOpen ? 'bg-green-400 animate-ping' : 'bg-red-400'}`} />
+                    <span className="font-mono font-bold text-xs text-white">Registration Form</span>
+                  </div>
+                  <div className="font-mono text-[10px] text-brand-muted mt-0.5">
+                    Status: <span className={formSettings.registrationOpen ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                      {formSettings.registrationOpen ? 'ACCEPTING TEAMS' : 'CLOSED'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleForm('registrationOpen')}
+                  disabled={savingSettings}
+                  className={`px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    formSettings.registrationOpen
+                      ? 'bg-green-500 hover:bg-green-600 text-black shadow-lg shadow-green-500/20'
+                      : 'bg-brand-card hover:bg-brand-surface text-brand-muted border border-brand-border'
+                  }`}
+                >
+                  {formSettings.registrationOpen ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              {/* 2. Accommodation Form Toggle */}
+              <div className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                formSettings.accommodationOpen
+                  ? 'bg-purple-500/10 border-purple-500/30 text-white'
+                  : 'bg-red-500/10 border-red-500/30 text-brand-muted'
+              }`}>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${formSettings.accommodationOpen ? 'bg-purple-400 animate-ping' : 'bg-red-400'}`} />
+                    <span className="font-mono font-bold text-xs text-white">Accommodation Form</span>
+                  </div>
+                  <div className="font-mono text-[10px] text-brand-muted mt-0.5">
+                    Status: <span className={formSettings.accommodationOpen ? 'text-purple-400 font-bold' : 'text-red-400 font-bold'}>
+                      {formSettings.accommodationOpen ? 'OPEN (9TH OCT)' : 'CLOSED'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleForm('accommodationOpen')}
+                  disabled={savingSettings}
+                  className={`px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    formSettings.accommodationOpen
+                      ? 'bg-purple-500 hover:bg-purple-600 text-white shadow-lg shadow-purple-500/20'
+                      : 'bg-brand-card hover:bg-brand-surface text-brand-muted border border-brand-border'
+                  }`}
+                >
+                  {formSettings.accommodationOpen ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ── SECTION: LIVE HACKATHON COUNTDOWN TIMER (Requested Feature) ─────── */}
         <section className="relative overflow-hidden rounded-2xl border border-brand-border bg-gradient-to-r from-brand-surface via-brand-card to-brand-surface p-5 sm:p-6 shadow-2xl">
@@ -1986,6 +2286,443 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <MonitorPlay size={16} />
                 LAUNCH STAGE PROJECTOR ↗
               </a>
+            </div>
+          </section>
+        ) : activeTab === 'accommodation' ? (
+          /* ── VIEW: DEDICATED ACCOMMODATION REQUESTS TAB ─────────────────── */
+          <section className="space-y-6">
+            {/* Top Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-brand-surface border border-brand-border p-5 rounded-2xl shadow-xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                    <BedDouble size={20} />
+                  </div>
+                  <div>
+                    <h2 className="font-display font-black text-xl text-white tracking-wide">
+                      ACCOMMODATION REQUESTS
+                    </h2>
+                    <p className="text-xs text-brand-muted font-mono mt-0.5">
+                      Hostel accommodation requests for the night of 9th October, 2026. Rate: ₹100 per member.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={exportAccommodations}
+                  className="px-3.5 py-2 rounded-xl bg-brand-card hover:bg-brand-surface border border-brand-border text-white text-xs font-mono font-semibold flex items-center gap-1.5 transition-all"
+                >
+                  <FileSpreadsheet size={15} className="text-green-400" />
+                  EXPORT CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loadData(true)}
+                  disabled={loading || refreshing}
+                  className="px-3.5 py-2 rounded-xl bg-brand-primary/20 hover:bg-brand-primary/30 text-brand-primary border border-brand-primary/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all"
+                >
+                  <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+                  SYNC LIVE
+                </button>
+              </div>
+            </div>
+
+            {/* Accommodation Stats (4 Tiles) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* 1. Total Requests */}
+              <div className="p-4 rounded-2xl bg-brand-surface border border-brand-border shadow-lg">
+                <div className="font-mono text-[10px] text-brand-muted uppercase tracking-wider mb-1">TOTAL REQUESTS</div>
+                <div className="font-display font-black text-2xl sm:text-3xl text-white">
+                  {loading ? '...' : accommodationStats.totalRequests}
+                </div>
+                <div className="font-mono text-[10px] text-purple-400 mt-1">Teams Booked</div>
+              </div>
+
+              {/* 2. Total Members */}
+              <div className="p-4 rounded-2xl bg-brand-surface border border-brand-border shadow-lg">
+                <div className="font-mono text-[10px] text-brand-muted uppercase tracking-wider mb-1">TOTAL ACCOMMODATED</div>
+                <div className="font-display font-black text-2xl sm:text-3xl text-cyan-400">
+                  {loading ? '...' : accommodationStats.totalMembers}
+                </div>
+                <div className="font-mono text-[10px] text-brand-muted mt-1">Participants Staying</div>
+              </div>
+
+              {/* 3. Total Fee Collected */}
+              <div className="p-4 rounded-2xl bg-brand-surface border border-brand-border shadow-lg">
+                <div className="font-mono text-[10px] text-brand-muted uppercase tracking-wider mb-1">TOTAL AMOUNT</div>
+                <div className="font-display font-black text-2xl sm:text-3xl text-green-400">
+                  ₹{loading ? '...' : accommodationStats.totalAmount}
+                </div>
+                <div className="font-mono text-[10px] text-brand-muted mt-1">₹100 / member</div>
+              </div>
+
+              {/* 4. Verification Status */}
+              <div className="p-4 rounded-2xl bg-brand-surface border border-brand-border shadow-lg">
+                <div className="font-mono text-[10px] text-brand-muted uppercase tracking-wider mb-1">VERIFICATION STATUS</div>
+                <div className="flex items-center gap-3 mt-1">
+                  <div>
+                    <span className="font-display font-bold text-lg text-green-400">{accommodationStats.verifiedCount}</span>
+                    <span className="font-mono text-[10px] text-brand-muted block">VERIFIED</span>
+                  </div>
+                  <div className="h-6 w-px bg-brand-border" />
+                  <div>
+                    <span className="font-display font-bold text-lg text-yellow-400">{accommodationStats.pendingCount}</span>
+                    <span className="font-mono text-[10px] text-brand-muted block">PENDING</span>
+                  </div>
+                  <div className="h-6 w-px bg-brand-border" />
+                  <div>
+                    <span className="font-display font-bold text-lg text-red-400">{accommodationStats.rejectedCount}</span>
+                    <span className="font-mono text-[10px] text-brand-muted block">REJECTED</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Search & Filter Toolbar */}
+            <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" size={17} />
+                  <input
+                    type="text"
+                    value={accommodationSearchTerm}
+                    onChange={e => setAccommodationSearchTerm(e.target.value)}
+                    placeholder="Search by Team Name, Team Code, Request ID, Email, UPI ID, Member Name..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-brand-card border border-brand-border rounded-xl text-white placeholder-brand-muted text-xs font-mono focus:outline-none focus:border-brand-primary"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="font-mono text-xs text-brand-muted uppercase whitespace-nowrap">Filter Status:</label>
+                  <select
+                    value={accommodationStatusFilter}
+                    onChange={e => setAccommodationStatusFilter(e.target.value as any)}
+                    className="bg-brand-card border border-brand-border rounded-xl text-white text-xs px-3 py-2.5 font-mono focus:outline-none focus:border-brand-primary"
+                  >
+                    <option value="ALL">All Requests ({accommodations.length})</option>
+                    <option value="PENDING">Pending Review</option>
+                    <option value="VERIFIED">Verified</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs font-mono text-brand-muted pt-1">
+                <div>
+                  Showing <span className="text-white font-bold">{filteredAccommodations.length}</span> of {accommodations.length} accommodation requests
+                </div>
+                {(accommodationSearchTerm || accommodationStatusFilter !== 'ALL') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccommodationSearchTerm('')
+                      setAccommodationStatusFilter('ALL')
+                    }}
+                    className="text-brand-primary hover:underline"
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Accommodation Requests Table & Cards */}
+            <div className="bg-brand-surface border border-brand-border rounded-2xl shadow-xl overflow-hidden">
+              {loading ? (
+                <div className="p-16 text-center">
+                  <RefreshCw size={32} className="animate-spin text-purple-400 mx-auto mb-3" />
+                  <div className="font-mono text-sm text-brand-muted tracking-wider">
+                    FETCHING REAL ACCOMMODATION REQUESTS FROM GOOGLE SHEETS...
+                  </div>
+                </div>
+              ) : filteredAccommodations.length === 0 ? (
+                <div className="p-16 text-center">
+                  <BedDouble size={36} className="text-brand-muted mx-auto mb-3 opacity-60" />
+                  <div className="font-display font-bold text-lg text-white mb-1">No Accommodation Requests Found</div>
+                  <p className="text-xs text-brand-muted max-w-sm mx-auto">
+                    {accommodations.length === 0
+                      ? 'No teams have submitted accommodation requests yet. When participants submit the /accommodation-form, records appear here.'
+                      : 'No accommodation records match your current search and filter criteria.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop Table */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-brand-border bg-brand-card/90 font-mono text-brand-muted tracking-wider text-[11px] uppercase">
+                          <th className="py-3.5 px-4 font-semibold">Request ID & Time</th>
+                          <th className="py-3.5 px-4 font-semibold">Team Details</th>
+                          <th className="py-3.5 px-4 font-semibold">Members Selected</th>
+                          <th className="py-3.5 px-4 font-semibold">Amount & UPI</th>
+                          <th className="py-3.5 px-4 font-semibold">Payment Proof</th>
+                          <th className="py-3.5 px-4 font-semibold">Status</th>
+                          <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-brand-border/60">
+                        {filteredAccommodations.map((item) => (
+                          <tr
+                            key={item.accommodationId}
+                            className="hover:bg-brand-card/60 transition-colors group cursor-pointer"
+                            onClick={() => setSelectedAccommodation(item)}
+                          >
+                            {/* Request ID & Time */}
+                            <td className="py-3.5 px-4">
+                              <span className="font-mono font-bold text-purple-400 block">
+                                {item.accommodationId}
+                              </span>
+                              <span className="font-mono text-[10px] text-brand-muted">
+                                {item.timestamp || 'N/A'}
+                              </span>
+                            </td>
+
+                            {/* Team Name & Code */}
+                            <td className="py-3.5 px-4">
+                              <div className="font-bold text-white text-sm">{item.teamName}</div>
+                              <div className="font-mono text-[11px] text-cyan-400 mt-0.5">
+                                Code: {item.teamCode}
+                              </div>
+                              <div className="font-mono text-[10px] text-brand-muted truncate max-w-[180px]">
+                                Leader: {item.teamLeaderEmail}
+                              </div>
+                            </td>
+
+                            {/* Members Selected */}
+                            <td className="py-3.5 px-4 max-w-[260px]">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="font-mono text-xs px-2 py-0.5 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 font-bold">
+                                  {item.numberOfMembers} of {item.registeredTeamSize || 4} Members
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {item.selectedMembers.map((m, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-block px-1.5 py-0.5 rounded bg-brand-surface border border-brand-border text-[10px] font-mono text-white"
+                                  >
+                                    ✓ {m}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+
+                            {/* Amount & UPI */}
+                            <td className="py-3.5 px-4">
+                              <div className="font-mono font-bold text-white text-sm">₹{item.totalAmount}</div>
+                              <div className="font-mono text-[10px] text-brand-muted">
+                                (₹{item.ratePerMember || 100} × {item.numberOfMembers})
+                              </div>
+                              <div className="font-mono text-[10px] text-brand-orange mt-1 flex items-center gap-1">
+                                <span>UPI: {item.upiTransactionId || 'N/A'}</span>
+                                {item.upiTransactionId && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      navigator.clipboard.writeText(item.upiTransactionId)
+                                      setActionFeedback({ type: 'success', message: `Copied UPI: ${item.upiTransactionId}` })
+                                    }}
+                                    title="Copy UPI ID"
+                                    className="text-brand-muted hover:text-white"
+                                  >
+                                    <Copy size={11} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Screenshot */}
+                            <td className="py-3.5 px-4">
+                              {item.paymentScreenshotDriveUrl ? (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setPreviewScreenshotUrl(item.paymentScreenshotDriveUrl!)
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-brand-surface border border-brand-border text-cyan-400 hover:text-cyan-300 hover:border-cyan-500/40 text-[11px] font-mono transition-all"
+                                  >
+                                    <Eye size={12} /> View Proof
+                                  </button>
+                                  <a
+                                    href={item.paymentScreenshotDriveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-brand-muted hover:text-white"
+                                    title="Open in Google Drive"
+                                  >
+                                    <ExternalLink size={13} />
+                                  </a>
+                                </div>
+                              ) : (
+                                <span className="font-mono text-[10px] text-brand-muted">No Screenshot</span>
+                              )}
+                            </td>
+
+                            {/* Status Badges */}
+                            <td className="py-3.5 px-4">
+                              <div className="space-y-1">
+                                <div>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${
+                                    item.accommodationStatus === 'VERIFIED'
+                                      ? 'bg-green-500/20 text-green-300 border border-green-500/40'
+                                      : item.accommodationStatus === 'REJECTED'
+                                      ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                                      : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40'
+                                  }`}>
+                                    {item.accommodationStatus === 'VERIFIED' && <Check size={10} />}
+                                    {item.accommodationStatus === 'REJECTED' && <X size={10} />}
+                                    {item.accommodationStatus === 'PENDING' && <Clock size={10} />}
+                                    {item.accommodationStatus || 'PENDING'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className={`inline-flex items-center gap-1 font-mono text-[9px] ${
+                                    item.emailStatus === 'SENT' ? 'text-green-400' : 'text-brand-muted'
+                                  }`}>
+                                    <Mail size={10} /> Email: {item.emailStatus || 'PENDING'}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Action Buttons */}
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                {item.accommodationStatus !== 'VERIFIED' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setVerifyingAccommodation(item)}
+                                    className="px-2.5 py-1 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 text-[11px] font-mono font-semibold transition-all"
+                                    title="Verify and Approve Accommodation Payment"
+                                  >
+                                    Verify
+                                  </button>
+                                )}
+                                {item.accommodationStatus !== 'REJECTED' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRejectingAccommodation(item)
+                                      setAccommodationRejectionReason('')
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-[11px] font-mono font-semibold transition-all"
+                                    title="Reject Accommodation Payment"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAccommodation(item)}
+                                  className="p-1 rounded-lg text-brand-muted hover:text-white bg-brand-surface border border-brand-border"
+                                  title="View Full Accommodation Details"
+                                >
+                                  <Eye size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Cards */}
+                  <div className="lg:hidden divide-y divide-brand-border/60">
+                    {filteredAccommodations.map((item) => (
+                      <div
+                        key={item.accommodationId}
+                        className="p-4 space-y-3 hover:bg-brand-card/40 transition-colors"
+                        onClick={() => setSelectedAccommodation(item)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="font-mono font-bold text-xs text-purple-400">{item.accommodationId}</span>
+                            <h3 className="font-bold text-white text-base mt-0.5">{item.teamName}</h3>
+                            <div className="font-mono text-xs text-cyan-400">Team Code: {item.teamCode}</div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${
+                            item.accommodationStatus === 'VERIFIED'
+                              ? 'bg-green-500/20 text-green-300 border border-green-500/40'
+                              : item.accommodationStatus === 'REJECTED'
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                              : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40'
+                          }`}>
+                            {item.accommodationStatus || 'PENDING'}
+                          </span>
+                        </div>
+
+                        <div className="bg-brand-card/70 border border-brand-border/60 rounded-xl p-3 space-y-2">
+                          <div className="text-xs font-mono text-brand-muted flex justify-between">
+                            <span>Members Selected:</span>
+                            <span className="text-white font-bold">{item.numberOfMembers} members</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {item.selectedMembers.map((m, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 rounded bg-brand-surface text-[10px] font-mono text-white border border-brand-border">
+                                ✓ {m}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="text-xs font-mono text-brand-muted flex justify-between pt-1 border-t border-brand-border/40">
+                            <span>Amount:</span>
+                            <span className="text-green-400 font-bold">₹{item.totalAmount}</span>
+                          </div>
+                          <div className="text-xs font-mono text-brand-muted flex justify-between">
+                            <span>UPI Txn ID:</span>
+                            <span className="text-brand-orange font-bold">{item.upiTransactionId || 'N/A'}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1" onClick={e => e.stopPropagation()}>
+                          {item.paymentScreenshotDriveUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewScreenshotUrl(item.paymentScreenshotDriveUrl!)}
+                              className="px-2.5 py-1 rounded bg-brand-card border border-brand-border text-xs font-mono text-cyan-400 flex items-center gap-1"
+                            >
+                              <Eye size={12} /> View Screenshot
+                            </button>
+                          )}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            {item.accommodationStatus !== 'VERIFIED' && (
+                              <button
+                                type="button"
+                                onClick={() => setVerifyingAccommodation(item)}
+                                className="px-3 py-1 rounded-lg bg-green-500/20 text-green-300 border border-green-500/40 text-xs font-mono font-bold"
+                              >
+                                Verify
+                              </button>
+                            )}
+                            {item.accommodationStatus !== 'REJECTED' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRejectingAccommodation(item)
+                                  setAccommodationRejectionReason('')
+                                }}
+                                className="px-3 py-1 rounded-lg bg-red-500/20 text-red-300 border border-red-500/40 text-xs font-mono font-bold"
+                              >
+                                Reject
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </section>
         ) : (
@@ -3327,6 +4064,404 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 >
                   CONFIRM RESET
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {/* ── MODAL: ACCOMMODATION DETAILS ─────────────────────────────────── */}
+        {selectedAccommodation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl bg-brand-surface border border-brand-border rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-brand-border sticky top-0 bg-brand-surface z-10">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-purple-400 font-bold">{selectedAccommodation.accommodationId}</span>
+                    <span className="text-brand-muted text-xs">·</span>
+                    <span className="font-mono text-xs text-brand-muted">{selectedAccommodation.timestamp}</span>
+                  </div>
+                  <h2 className="font-display font-black text-xl text-white mt-1">
+                    {selectedAccommodation.teamName}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAccommodation(null)}
+                  className="p-2 rounded-xl text-brand-muted hover:text-white bg-brand-card hover:bg-brand-surface border border-brand-border transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-5">
+                {/* Status Banners */}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-brand-card border border-brand-border">
+                    <span className="font-mono text-[10px] text-brand-muted uppercase block">Accommodation Status</span>
+                    <span className={`font-mono font-bold text-sm mt-0.5 inline-block ${
+                      selectedAccommodation.accommodationStatus === 'VERIFIED'
+                        ? 'text-green-400'
+                        : selectedAccommodation.accommodationStatus === 'REJECTED'
+                        ? 'text-red-400'
+                        : 'text-yellow-400'
+                    }`}>
+                      {selectedAccommodation.accommodationStatus || 'PENDING'}
+                    </span>
+                    {selectedAccommodation.rejectionReason && (
+                      <div className="font-mono text-[10px] text-red-400 mt-1">
+                        Reason: {selectedAccommodation.rejectionReason}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 rounded-xl bg-brand-card border border-brand-border">
+                    <span className="font-mono text-[10px] text-brand-muted uppercase block">Confirmation Email</span>
+                    <span className={`font-mono font-bold text-sm mt-0.5 inline-block ${
+                      selectedAccommodation.emailStatus === 'SENT' ? 'text-green-400' : 'text-brand-muted'
+                    }`}>
+                      {selectedAccommodation.emailStatus || 'PENDING'}
+                    </span>
+                    <div className="font-mono text-[10px] text-brand-muted mt-1 truncate">
+                      To: {selectedAccommodation.teamLeaderEmail}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Team Details */}
+                <div className="bg-brand-card border border-brand-border p-4 rounded-xl space-y-3">
+                  <div className="font-mono text-xs text-purple-400 font-bold uppercase tracking-wider">
+                    REGISTERED TEAM INFORMATION
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="font-mono text-[10px] text-brand-muted block">Team Code</span>
+                      <span className="font-mono font-bold text-cyan-400 text-sm">{selectedAccommodation.teamCode}</span>
+                    </div>
+                    <div>
+                      <span className="font-mono text-[10px] text-brand-muted block">Registered Team Size</span>
+                      <span className="font-mono text-white font-bold">{selectedAccommodation.registeredTeamSize || 4} Members</span>
+                    </div>
+                    <div>
+                      <span className="font-mono text-[10px] text-brand-muted block">Accommodation Date</span>
+                      <span className="font-mono text-white">9th October 2026</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Members Requesting Accommodation */}
+                <div className="bg-brand-card border border-brand-border p-4 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs text-purple-400 font-bold uppercase tracking-wider">
+                      SELECTED ACCOMMODATION MEMBERS ({selectedAccommodation.numberOfMembers})
+                    </span>
+                    <span className="font-mono text-xs text-brand-muted">
+                      ₹100 / member
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {selectedAccommodation.selectedMembers.map((name, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-brand-surface border border-brand-border text-xs">
+                        <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
+                        <span className="font-medium text-white">{name}</span>
+                        <span className="font-mono text-[10px] text-brand-muted ml-auto">Member #{i + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment & Screenshot */}
+                <div className="bg-brand-card border border-brand-border p-4 rounded-xl space-y-3">
+                  <div className="font-mono text-xs text-green-400 font-bold uppercase tracking-wider">
+                    PAYMENT & VERIFICATION PROOF
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <span className="font-mono text-[10px] text-brand-muted block">Total Calculated Fee</span>
+                      <div className="font-mono font-black text-xl text-green-400 mt-0.5">
+                        ₹{selectedAccommodation.totalAmount}
+                      </div>
+                      <div className="font-mono text-[10px] text-brand-muted mt-1">
+                        Rate: ₹{selectedAccommodation.ratePerMember || 100} × {selectedAccommodation.numberOfMembers} members
+                      </div>
+
+                      <div className="mt-3">
+                        <span className="font-mono text-[10px] text-brand-muted block">UPI Transaction ID</span>
+                        <div className="font-mono font-bold text-white text-sm mt-0.5 flex items-center gap-2">
+                          <span>{selectedAccommodation.upiTransactionId || 'N/A'}</span>
+                          {selectedAccommodation.upiTransactionId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(selectedAccommodation.upiTransactionId)
+                                setActionFeedback({ type: 'success', message: 'UPI ID copied to clipboard' })
+                              }}
+                              className="text-brand-muted hover:text-white"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="font-mono text-[10px] text-brand-muted block mb-1.5">Payment Screenshot</span>
+                      {selectedAccommodation.paymentScreenshotDriveUrl ? (
+                        <div className="space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewScreenshotUrl(selectedAccommodation.paymentScreenshotDriveUrl!)}
+                            className="w-full py-2 px-3 rounded-lg bg-brand-surface hover:bg-brand-card border border-brand-border text-cyan-400 text-xs font-mono font-semibold flex items-center justify-center gap-2 transition-all"
+                          >
+                            <Eye size={14} /> View Screenshot Modal
+                          </button>
+                          <a
+                            href={selectedAccommodation.paymentScreenshotDriveUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2 px-3 rounded-lg bg-brand-surface hover:bg-brand-card border border-brand-border text-brand-muted hover:text-white text-xs font-mono flex items-center justify-center gap-2 transition-all"
+                          >
+                            <ExternalLink size={14} /> Open in Google Drive
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-lg bg-brand-surface border border-brand-border text-center font-mono text-xs text-brand-muted">
+                          No screenshot uploaded
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="p-6 border-t border-brand-border flex items-center justify-between gap-3 bg-brand-surface">
+                <div className="flex items-center gap-2">
+                  {selectedAccommodation.accommodationStatus !== 'VERIFIED' && (
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => {
+                        handleUpdateAccommodationStatus(selectedAccommodation.accommodationId, 'VERIFIED')
+                      }}
+                      className="px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-black font-mono text-xs font-bold transition-all shadow-lg flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Check size={14} /> VERIFY PAYMENT
+                    </button>
+                  )}
+                  {selectedAccommodation.accommodationStatus !== 'REJECTED' && (
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setRejectingAccommodation(selectedAccommodation)
+                        setAccommodationRejectionReason('')
+                      }}
+                      className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 font-mono text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <X size={14} /> REJECT
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedAccommodation(null)}
+                  className="px-4 py-2 rounded-xl border border-brand-border bg-brand-card text-brand-muted hover:text-white font-mono text-xs font-semibold"
+                >
+                  CLOSE
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── MODAL: VERIFY ACCOMMODATION CONFIRMATION ──────────────────────── */}
+        {verifyingAccommodation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-brand-surface border border-green-500/40 rounded-2xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-green-500/20 text-green-400 flex items-center justify-center">
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-lg text-white">VERIFY ACCOMMODATION?</h3>
+                  <div className="font-mono text-xs text-green-400 font-bold uppercase">
+                    CONFIRM PAYMENT RECEIVED
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-brand-card border border-brand-border space-y-1.5 text-xs font-mono">
+                <div className="text-white font-bold">{verifyingAccommodation.teamName}</div>
+                <div className="text-cyan-400">Team Code: {verifyingAccommodation.teamCode}</div>
+                <div className="text-brand-muted">
+                  Members: {verifyingAccommodation.numberOfMembers} ({verifyingAccommodation.selectedMembers.join(', ')})
+                </div>
+                <div className="text-green-400 font-bold pt-1">
+                  Amount: ₹{verifyingAccommodation.totalAmount} (UPI: {verifyingAccommodation.upiTransactionId})
+                </div>
+              </div>
+
+              <p className="text-xs text-brand-muted font-mono leading-relaxed">
+                This will mark the accommodation request as <strong className="text-green-400">VERIFIED</strong> and confirm their room reservation for 9th October.
+              </p>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setVerifyingAccommodation(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-brand-border bg-brand-card text-brand-muted text-xs font-mono font-semibold hover:text-white transition-all"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => handleUpdateAccommodationStatus(verifyingAccommodation.accommodationId, 'VERIFIED')}
+                  className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-black text-xs font-mono font-bold shadow-lg transition-all disabled:opacity-50"
+                >
+                  {actionLoading ? 'UPDATING...' : 'CONFIRM VERIFIED'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── MODAL: REJECT ACCOMMODATION CONFIRMATION ──────────────────────── */}
+        {rejectingAccommodation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-brand-surface border border-red-500/40 rounded-2xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center">
+                  <ShieldAlert size={24} />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-lg text-white">REJECT ACCOMMODATION?</h3>
+                  <div className="font-mono text-xs text-red-400 font-bold uppercase">
+                    PAYMENT ISSUE / INVALID PROOF
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-brand-card border border-brand-border space-y-1 text-xs font-mono">
+                <div className="text-white font-bold">{rejectingAccommodation.teamName}</div>
+                <div className="text-brand-muted">Request ID: {rejectingAccommodation.accommodationId}</div>
+                <div className="text-red-400 font-bold">Amount: ₹{rejectingAccommodation.totalAmount}</div>
+              </div>
+
+              <div>
+                <label className="block font-mono text-[10px] text-brand-muted uppercase mb-1">
+                  Reason for Rejection (Optional):
+                </label>
+                <input
+                  type="text"
+                  value={accommodationRejectionReason}
+                  onChange={e => setAccommodationRejectionReason(e.target.value)}
+                  placeholder="e.g. Invalid UPI ID / blurred screenshot"
+                  className="w-full px-3 py-2 bg-brand-card border border-brand-border rounded-xl text-white text-xs font-mono focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectingAccommodation(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-brand-border bg-brand-card text-brand-muted text-xs font-mono font-semibold hover:text-white transition-all"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => handleUpdateAccommodationStatus(rejectingAccommodation.accommodationId, 'REJECTED', accommodationRejectionReason)}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-bold shadow-lg transition-all disabled:opacity-50"
+                >
+                  {actionLoading ? 'UPDATING...' : 'CONFIRM REJECTION'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── MODAL: SCREENSHOT LIGHTBOX VIEWER ─────────────────────────────── */}
+        {previewScreenshotUrl && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+            onClick={() => setPreviewScreenshotUrl(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative max-w-3xl w-full max-h-[90vh] bg-brand-surface border border-brand-border rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-brand-border bg-brand-card">
+                <div className="flex items-center gap-2 text-xs font-mono text-white">
+                  <ImageIcon size={15} className="text-cyan-400" />
+                  <span>Payment Screenshot Proof</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={previewScreenshotUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1 rounded bg-brand-surface border border-brand-border text-cyan-400 hover:text-white text-xs font-mono flex items-center gap-1"
+                  >
+                    <ExternalLink size={12} /> Full Window
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewScreenshotUrl(null)}
+                    className="p-1 rounded text-brand-muted hover:text-white"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 p-4 overflow-auto flex items-center justify-center bg-black/40 min-h-[300px]">
+                <img
+                  src={previewScreenshotUrl}
+                  alt="Payment Screenshot"
+                  className="max-h-[70vh] max-w-full object-contain rounded-lg border border-brand-border shadow-md"
+                  onError={(e) => {
+                    // If Google Drive link blocks iframe or img embedding due to CSP, show fallback
+                    const target = e.currentTarget
+                    target.style.display = 'none'
+                    const fallback = target.nextElementSibling as HTMLElement
+                    if (fallback) fallback.style.display = 'block'
+                  }}
+                />
+                <div className="hidden p-6 text-center space-y-3 font-mono text-xs">
+                  <p className="text-brand-muted">
+                    Drive preview cannot be embedded directly in the browser due to Google Drive CORS policy.
+                  </p>
+                  <a
+                    href={previewScreenshotUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white font-bold"
+                  >
+                    <ExternalLink size={14} /> Open Screenshot in Google Drive
+                  </a>
+                </div>
               </div>
             </motion.div>
           </div>

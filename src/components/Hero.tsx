@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowRight, ChevronDown, Shield, Lock } from 'lucide-react'
 import EventCountdown from './EventCountdown'
-import { IS_REGISTRATION_CLOSED } from '../../config/event'
+import { useAppSettings } from '../context/SettingsContext'
 import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 export default function Hero() {
+  const { registrationOpen } = useAppSettings()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouseRef = useRef({ x: 0, y: 0 })
 
@@ -199,7 +200,7 @@ export default function Hero() {
           className="flex flex-col items-center gap-3 mt-2 mb-8 w-full max-w-xs sm:max-w-sm"
         >
           {/* Primary Button: Red cyber-cut pill */}
-          {IS_REGISTRATION_CLOSED ? (
+          {!registrationOpen ? (
             <button
               type="button"
               onClick={openRegistrationClosedModal}

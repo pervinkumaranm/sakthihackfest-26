@@ -34,7 +34,7 @@ const REGISTRATION_CLOSED_MESSAGE =
   'Registration Closed — The maximum registration limit of 60 teams has been reached.';
 
 const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec';
+  'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec';
 
 const ROOT_FOLDER_NAME = 'SAKTHI HACKFEST 2K26';
 const PROOFS_FOLDER_NAME = 'Payment Proofs';

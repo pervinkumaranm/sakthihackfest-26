@@ -2,10 +2,12 @@ import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Lock } from 'lucide-react'
-import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/event'
+import { EVENT_CONFIG } from '../../config/event'
+import { useAppSettings } from '../context/SettingsContext'
 import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 export default function FinalCTA() {
+  const { registrationOpen } = useAppSettings()
   const ref = useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { once: true, margin: '-80px' })
 
@@ -41,7 +43,7 @@ export default function FinalCTA() {
             animate={inView ? { opacity: 1, scale: 1 } : {}}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            {IS_REGISTRATION_CLOSED ? (
+            {!registrationOpen ? (
               <button
                 type="button"
                 onClick={openRegistrationClosedModal}
@@ -62,7 +64,7 @@ export default function FinalCTA() {
           </motion.div>
 
           <p className="mt-6 font-mono text-sm text-brand-muted">
-            {IS_REGISTRATION_CLOSED ? (
+            {!registrationOpen ? (
               <>
                 <span className="text-red-400 font-bold">Registration Closed</span> ·{' '}
                 <span className="text-white">Capacity Reached (60/60 Teams Filled)</span>

@@ -5,7 +5,7 @@
  * email status tracking, and admin verification actions.
  */
 
-import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus } from '../types'
+import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus, StoredAccommodation, AppSettings, AccommodationStatus } from '../types'
 import * as XLSX from 'xlsx'
 import { IS_REGISTRATION_CLOSED } from '../../config/event'
 
@@ -45,7 +45,7 @@ function saveLocalRegistrations(list: StoredRegistration[]) {
 }
 
 const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec'
+  'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec'
 
 export function normalizeGasRegistration(raw: Record<string, any>): StoredRegistration {
   const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -332,8 +332,7 @@ export const apiService = {
 
     // Direct Apps Script query fallback
     try {
-      const gasUrl =
-        'https://script.google.com/macros/s/AKfycbwAH0gJIERvaA_pMjb3fR08OjoBuQ12lq8JBR04W95MVfha23yTQOqcft-zC-JLsHnB/exec?action=GET_COUNT'
+      const gasUrl = `${DEFAULT_GAS_URL}?action=GET_COUNT`
       const res = await fetch(gasUrl)
       if (res.ok) {
         const data = await res.json()
@@ -735,4 +734,212 @@ export const apiService = {
       XLSX.writeFile(workbook, filename)
     }
   },
+
+  // ── Accommodation System ──────────────────────────────────────────────────
+  async getRegisteredTeamsForAccommodation(): Promise<Array<{
+    teamCode: string
+    teamName: string
+  }>> {
+    try {
+      const res = await fetch('/api/accommodation?action=GET_TEAMS')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.data)) {
+          return json.data.map((t: any) => ({
+            teamCode: t.teamCode || t.registrationId,
+            teamName: t.teamName,
+          }))
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch teams from /api/accommodation:', e)
+    }
+
+    // Direct Apps Script query fallback
+    try {
+      const res = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.data)) {
+          return json.data.map((item: any) => {
+            const reg = normalizeGasRegistration(item)
+            return {
+              teamCode: reg.registrationId,
+              teamName: reg.teamName,
+            }
+          }).filter((t: any) => Boolean(t.teamCode && t.teamName))
+        }
+      }
+    } catch (_) {}
+
+    return []
+  },
+
+  async getTeamMembersForAccommodation(teamCode: string): Promise<{ teamCode: string; teamName: string; members: string[] } | null> {
+    try {
+      const res = await fetch(`/api/accommodation?action=GET_TEAM_MEMBERS&teamCode=${encodeURIComponent(teamCode)}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.members)) {
+          return {
+            teamCode: json.teamCode,
+            teamName: json.teamName,
+            members: json.members,
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch team members from /api/accommodation:', e)
+    }
+
+    // Direct Apps Script fallback
+    try {
+      const res = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.data)) {
+          const item = json.data.find((raw: any) => {
+            const reg = normalizeGasRegistration(raw)
+            return (reg.registrationId || '').toUpperCase() === teamCode.toUpperCase()
+          })
+          if (item) {
+            const reg = normalizeGasRegistration(item)
+            const members: string[] = []
+            if (reg.leaderName) members.push(reg.leaderName)
+            if (reg.members) {
+              reg.members.forEach(m => {
+                if (m.name && !members.includes(m.name)) members.push(m.name)
+              })
+            }
+            return {
+              teamCode: reg.registrationId,
+              teamName: reg.teamName,
+              members,
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null
+  },
+
+  async submitAccommodation(data: {
+    teamCode: string
+    teamName: string
+    selectedMembers: string[]
+    upiTransactionId: string
+    paymentScreenshotData: string
+    paymentScreenshotName?: string
+  }): Promise<ApiResponse> {
+    try {
+      const res = await fetch('/api/accommodation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SUBMIT_ACCOMMODATION',
+          data: {
+            ...data,
+            paymentScreenshotBase64: data.paymentScreenshotData,
+          },
+        }),
+      })
+      const result = await res.json()
+      return result
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message || 'Failed to submit accommodation request.',
+      }
+    }
+  },
+
+  async getAccommodations(): Promise<StoredAccommodation[]> {
+    const token = localStorage.getItem('shf26_admin_token') || sessionStorage.getItem('shf26_admin_token')
+    try {
+      const res = await fetch('/api/accommodation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: 'GET_ACCOMMODATIONS' }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.data)) {
+          return json.data
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch accommodations:', e)
+    }
+    return []
+  },
+
+  async updateAccommodationStatus(accommodationId: string, status: AccommodationStatus, reason?: string): Promise<ApiResponse> {
+    const token = localStorage.getItem('shf26_admin_token') || sessionStorage.getItem('shf26_admin_token')
+    try {
+      const res = await fetch('/api/accommodation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'UPDATE_STATUS',
+          accommodationId,
+          accommodationStatus: status,
+          rejectionReason: reason,
+        }),
+      })
+      return await res.json()
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to update accommodation status.' }
+    }
+  },
+
+  // ── Form Toggles Management ───────────────────────────────────────────────
+  async getFormSettings(): Promise<AppSettings> {
+    try {
+      const res = await fetch('/api/settings')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success) {
+          return {
+            registrationOpen: json.registrationOpen,
+            accommodationOpen: json.accommodationOpen,
+            lastUpdated: json.lastUpdated,
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {
+      registrationOpen: !IS_REGISTRATION_CLOSED,
+      accommodationOpen: true,
+    }
+  },
+
+  async updateFormSettings(settings: { registrationOpen?: boolean; accommodationOpen?: boolean }): Promise<ApiResponse & { settings?: AppSettings }> {
+    const token = localStorage.getItem('shf26_admin_token') || sessionStorage.getItem('shf26_admin_token')
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(settings),
+      })
+      const json = await res.json()
+      if (json && json.success) {
+        window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: json }))
+      }
+      return json
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to update form settings.' }
+    }
+  },
 }
+

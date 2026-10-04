@@ -6,12 +6,13 @@ import Timeline from '../components/Timeline'
 import PrizeSection from '../components/PrizeSection'
 import FinalCTA from '../components/FinalCTA'
 import RegistrationClosedModal from '../components/RegistrationClosedModal'
-import { IS_REGISTRATION_CLOSED } from '../../config/event'
+import { useAppSettings } from '../context/SettingsContext'
 
 export default function Home() {
+  const { registrationOpen } = useAppSettings()
   return (
     <main>
-      {IS_REGISTRATION_CLOSED && <RegistrationClosedModal initialOpen={true} />}
+      {!registrationOpen && <RegistrationClosedModal initialOpen={false} />}
       <Hero />
       <EventIntro />
       <ChallengeCards />

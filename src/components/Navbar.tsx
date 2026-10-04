@@ -2,18 +2,20 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Shield } from 'lucide-react'
-import { IS_REGISTRATION_CLOSED } from '../../config/event'
+import { useAppSettings } from '../context/SettingsContext'
 import { openRegistrationClosedModal } from './RegistrationClosedModal'
 
 const navLinks = [
   { label: 'EVENT', href: '/#event' },
   { label: 'CHALLENGE', href: '/#challenge' },
   { label: 'TIMELINE', href: '/#timeline' },
+  { label: 'ACCOMMODATION', href: '/accommodation-form' },
   { label: 'RULES', href: '/rules' },
   { label: 'FAQ', href: '/faq' },
 ]
 
 export default function Navbar() {
+  const { registrationOpen } = useAppSettings()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
@@ -117,18 +119,18 @@ export default function Navbar() {
 
             {/* CTA + Hamburger */}
             <div className="flex items-center gap-2.5">
-              {IS_REGISTRATION_CLOSED ? (
+              {!registrationOpen ? (
                 <button
                   type="button"
                   onClick={openRegistrationClosedModal}
-                  className="hidden sm:flex items-center gap-2 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs tracking-[0.15em] px-5 py-2.5 rounded-lg shadow-[0_0_20px_rgba(255,59,48,0.4)] transition-all duration-200 uppercase cursor-pointer"
+                  className="hidden sm:flex items-center gap-1.5 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-[11px] tracking-[0.12em] px-3.5 py-1.5 rounded-md shadow-sm transition-all duration-200 uppercase cursor-pointer"
                 >
                   REGISTRATION CLOSED
                 </button>
               ) : (
                 <Link
                   to="/register"
-                  className="hidden sm:flex items-center gap-2 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs tracking-[0.15em] px-5 py-2.5 rounded-lg shadow-[0_0_20px_rgba(255,59,48,0.4)] transition-all duration-200 uppercase"
+                  className="hidden sm:flex items-center gap-2 bg-[#FF3B30] hover:bg-[#ff4f44] text-white font-display font-extrabold text-xs tracking-[0.15em] px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(255,59,48,0.35)] transition-all duration-200 uppercase"
                 >
                   REGISTER NOW
                 </Link>
@@ -199,14 +201,14 @@ export default function Navbar() {
               transition={{ delay: 0.35 }}
               className="mt-8"
             >
-              {IS_REGISTRATION_CLOSED ? (
+              {!registrationOpen ? (
                 <button
                   type="button"
                   onClick={() => {
                     setMobileOpen(false)
                     openRegistrationClosedModal()
                   }}
-                  className="block w-full text-center bg-brand-primary text-white font-display font-bold text-lg tracking-widest py-4 cyber-cut-corner cursor-pointer"
+                  className="block w-full text-center bg-brand-primary text-white font-display font-bold text-base tracking-widest py-3 cyber-cut-corner cursor-pointer"
                 >
                   REGISTRATION CLOSED
                 </button>
