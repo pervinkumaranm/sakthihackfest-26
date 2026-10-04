@@ -4,7 +4,7 @@
 > **Google Sheet ID:** `1F_XlNsLdUXx31w92caKs5jidCeI0jcZIMY_TPPBJefE`  
 > **Drive Payment Proofs Folder ID:** `1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC`  
 > **Active Backend Apps Script Project:** `SAKTHI HACKFEST 2K26 Backend` (Script ID: `1LZjRe9_aA7axqAYIAAtcO7oAMPmthrRyaYBruFaemll-BCK8s4DoYpdH`)  
-> **Max Registration Limit:** Strictly **60 Teams**
+> **Max Registration Limit:** Strictly **75 Teams**
 
 ---
 
@@ -14,7 +14,7 @@ Looking at your Google Apps Script dashboard (Screenshot):
 1. ❌ **`Untitled project`** (`1oCcH7jYlpWSJWL34EWEYNvfBzfYjjcavtDpkyt087j8Uroirct8nOL7`):  
    This contains `closeMyForm()` for closing a Google Form at 50 responses. **This is NOT the website backend.**
 2. ✅ **`SAKTHI HACKFEST 2K26 Backend`** (`1LZjRe9_aA7axqAYIAAtcO7oAMPmthrRyaYBruFaemll-BCK8s4DoYpdH`):  
-   **THIS IS THE OFFICIAL BACKEND SCRIPT.** It handles the 60-team atomic lock, Google Sheet writes, Google Drive payment proof uploads, and automated confirmation emails.
+   **THIS IS THE OFFICIAL BACKEND SCRIPT.** It handles the 75-team atomic lock, Google Sheet writes, Google Drive payment proof uploads, and automated confirmation emails.
 
 ---
 

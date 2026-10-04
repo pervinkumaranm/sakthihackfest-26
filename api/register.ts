@@ -29,9 +29,9 @@ const DEFAULT_PROOFS_FOLDER_ID = '1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC';
 const DEFAULT_DRIVE_ROOT_FOLDER_ID = '1na3zZsEJDQhFGI8-rD01ZGhjHU-mIQJC';
 const SHEET_TAB_NAME = 'Registrations';
 
-const MAX_REGISTRATION_LIMIT = 60;
+const MAX_REGISTRATION_LIMIT = 75;
 const REGISTRATION_CLOSED_MESSAGE =
-  'Registration Closed — The maximum registration limit of 60 teams has been reached.';
+  'Registration Closed — The maximum registration limit of 75 teams has been reached.';
 
 const DEFAULT_GAS_URL =
   'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec';
@@ -891,7 +891,7 @@ async function processRegistration(rawPayload: any) {
     };
   }
 
-  // Enforce Atomic 60-team registration limit strictly when IS_REGISTRATION_CLOSED is true
+  // Enforce Atomic 75-team registration limit strictly when IS_REGISTRATION_CLOSED is true
   const currentRegisteredCount = getSuccessfullyRegisteredCount(existingRows, headers);
   console.log(`Current registered teams count: ${currentRegisteredCount} / ${MAX_REGISTRATION_LIMIT} (IS_REGISTRATION_CLOSED: ${IS_REGISTRATION_CLOSED})`);
   if (IS_REGISTRATION_CLOSED && currentRegisteredCount >= MAX_REGISTRATION_LIMIT) {

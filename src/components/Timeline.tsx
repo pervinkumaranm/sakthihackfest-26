@@ -57,7 +57,7 @@ export default function Timeline() {
                 </>
               )
               const displayDescription = isRegClosed
-                ? 'Registrations are officially closed as all 60 team slots have been filled.'
+                ? 'Registrations are officially closed as all 75 team slots have been filled.'
                 : item.description
 
               return (

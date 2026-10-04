@@ -68,7 +68,7 @@ export default function RegistrationClosedModal({
             </div>
 
             <div className="inline-block px-3 py-1 mb-3 rounded-full bg-red-500/10 border border-red-500/20 font-mono text-[11px] font-bold text-red-400 uppercase tracking-widest">
-              CAPACITY REACHED (60/60)
+              CAPACITY REACHED (75/75)
             </div>
 
             <h2 className="font-display font-black text-xl sm:text-2xl text-white tracking-tight mb-3">
@@ -76,11 +76,11 @@ export default function RegistrationClosedModal({
             </h2>
 
             <p className="font-mono text-xs sm:text-sm text-red-300 font-semibold mb-3 leading-relaxed">
-              Registration Closed — The maximum registration limit of 60 teams has been reached.
+              Registration Closed — The maximum registration limit of 75 teams has been reached.
             </p>
 
             <p className="text-xs sm:text-sm text-brand-muted leading-relaxed font-sans mb-6">
-              Thank you for the tremendous enthusiasm and overwhelming response for {EVENT_CONFIG.eventName}. All 60 team slots have been officially filled. No further registrations can be accepted.
+              Thank you for the tremendous enthusiasm and overwhelming response for {EVENT_CONFIG.eventName}. All 75 team slots have been officially filled. No further registrations can be accepted.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">

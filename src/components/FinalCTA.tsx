@@ -67,7 +67,7 @@ export default function FinalCTA() {
             {!registrationOpen ? (
               <>
                 <span className="text-red-400 font-bold">Registration Closed</span> ·{' '}
-                <span className="text-white">Capacity Reached (60/60 Teams Filled)</span>
+                <span className="text-white">Capacity Reached (75/75 Teams Filled)</span>
               </>
             ) : (
               <>

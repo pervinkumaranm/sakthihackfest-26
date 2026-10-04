@@ -128,10 +128,10 @@ export function normalizeGasRegistration(raw: Record<string, any>): StoredRegist
 function getFriendlyErrorMessage(errorCode?: string, rawMessage?: string): string {
   if (
     errorCode === 'REGISTRATION_CLOSED' ||
-    rawMessage?.includes('limit of 60') ||
+    rawMessage?.includes('limit of 75') ||
     rawMessage?.includes('Registration Closed')
   ) {
-    return 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
+    return 'Registration Closed — The maximum registration limit of 75 teams has been reached.'
   }
   if (errorCode === 'NETWORK_ERROR') {
     return 'Unable to connect to the registration server. Please check your internet connection and try again.'
@@ -237,13 +237,13 @@ export const apiService = {
       if (!result.success) {
         const isClosed =
           result.errorCode === 'REGISTRATION_CLOSED' ||
-          result.message?.includes('60') ||
+          result.message?.includes('75') ||
           result.message?.includes('Registration Closed')
         return {
           success: false,
           errorCode: (isClosed && IS_REGISTRATION_CLOSED) ? 'REGISTRATION_CLOSED' : (result.errorCode || 'REGISTRATION_FAILED'),
           error: (isClosed && IS_REGISTRATION_CLOSED)
-            ? 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
+            ? 'Registration Closed — The maximum registration limit of 75 teams has been reached.'
             : getFriendlyErrorMessage(result.errorCode, result.message),
         }
       }
@@ -290,13 +290,13 @@ export const apiService = {
     } catch (err: any) {
       console.error("REGISTRATION ERROR:", err);
       const isClosed =
-        err?.message?.includes('60') ||
+        err?.message?.includes('75') ||
         err?.message?.includes('Registration Closed');
       return {
         success: false,
         errorCode: isClosed ? 'REGISTRATION_CLOSED' : 'REGISTRATION_FAILED',
         error: isClosed
-          ? 'Registration Closed — The maximum registration limit of 60 teams has been reached.'
+          ? 'Registration Closed — The maximum registration limit of 75 teams has been reached.'
           : err.message || 'Registration could not be completed. Please try again.',
       };
     }
@@ -320,7 +320,7 @@ export const apiService = {
           return {
             success: true,
             count: data.count,
-            limit: data.limit || 60,
+            limit: data.limit || 75,
             isRegistrationClosed: IS_REGISTRATION_CLOSED,
             message: data.message,
           }
@@ -340,7 +340,7 @@ export const apiService = {
           return {
             success: true,
             count: data.count,
-            limit: data.limit || 60,
+            limit: data.limit || 75,
             isRegistrationClosed: IS_REGISTRATION_CLOSED,
             message: data.message,
           }
@@ -351,7 +351,7 @@ export const apiService = {
     return {
       success: false,
       count: 0,
-      limit: 60,
+      limit: 75,
       isRegistrationClosed: IS_REGISTRATION_CLOSED,
     }
   },

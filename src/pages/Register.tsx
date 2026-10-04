@@ -117,7 +117,7 @@ export default function Register() {
     }
   }, [selectedTeamSize, replace])
 
-  // Check Registration Limit (Strict 60 Teams Limit)
+  // Check Registration Limit (Strict 75 Teams Limit)
   useEffect(() => {
     let active = true
     const verifyRegistrationLimit = async () => {
@@ -296,7 +296,7 @@ export default function Register() {
       } else {
         const isClosed =
           response?.errorCode === 'REGISTRATION_CLOSED' ||
-          response?.error?.includes('limit of 60') ||
+          response?.error?.includes('limit of 75') ||
           response?.error?.includes('Registration Closed')
 
         if (isClosed && IS_REGISTRATION_CLOSED) {
@@ -310,7 +310,7 @@ export default function Register() {
     } catch (err: any) {
       console.error('Registration submission error:', err)
       const isClosed =
-        err?.message?.includes('limit of 60') ||
+        err?.message?.includes('limit of 75') ||
         err?.message?.includes('Registration Closed')
       if (isClosed && IS_REGISTRATION_CLOSED) {
         setIsRegistrationClosed(true)
@@ -385,11 +385,11 @@ export default function Register() {
                 <div className="font-display font-bold text-sm sm:text-base text-red-100 tracking-wide flex items-center gap-2">
                   REGISTRATION CLOSED
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 uppercase tracking-widest">
-                    60 / 60 TEAMS
+                    75 / 75 TEAMS
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-red-200/90 leading-relaxed font-sans mt-1">
-                  Registration Closed — The maximum registration limit of 60 teams has been reached.
+                  Registration Closed — The maximum registration limit of 75 teams has been reached.
                 </p>
               </div>
             </div>
@@ -1315,7 +1315,7 @@ export default function Register() {
               </div>
 
               <div className="inline-block px-3 py-1 mb-3 rounded-full bg-red-500/10 border border-red-500/20 font-mono text-[11px] font-bold text-red-400 uppercase tracking-widest">
-                CAPACITY REACHED (60/60)
+                CAPACITY REACHED (75/75)
               </div>
 
               <h2 className="font-display font-black text-xl sm:text-2xl text-white tracking-tight mb-3">
@@ -1323,11 +1323,11 @@ export default function Register() {
               </h2>
 
               <p className="font-mono text-xs sm:text-sm text-red-300 font-semibold mb-3 leading-relaxed">
-                Registration Closed — The maximum registration limit of 60 teams has been reached.
+                Registration Closed — The maximum registration limit of 75 teams has been reached.
               </p>
 
               <p className="text-xs sm:text-sm text-brand-muted leading-relaxed font-sans mb-6">
-                Thank you for the tremendous enthusiasm and overwhelming response for {EVENT_CONFIG.eventName}. All 60 team slots have been officially filled. No further registrations can be accepted.
+                Thank you for the tremendous enthusiasm and overwhelming response for {EVENT_CONFIG.eventName}. All 75 team slots have been officially filled. No further registrations can be accepted.
               </p>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">

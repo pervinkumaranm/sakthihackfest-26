@@ -140,7 +140,7 @@ function doGet(e) {
       if (action === "GET_COUNT" || action === "REGISTRATION_COUNT") {
         const sheet = getOrCreateRegistrationSheet();
         const count = getSuccessfullyRegisteredCount(sheet);
-        const limit = (typeof CONFIG !== "undefined" && CONFIG.MAX_REGISTRATION_LIMIT) ? CONFIG.MAX_REGISTRATION_LIMIT : 60;
+        const limit = (typeof CONFIG !== "undefined" && CONFIG.MAX_REGISTRATION_LIMIT) ? CONFIG.MAX_REGISTRATION_LIMIT : 75;
         return buildJsonResponse({
           success: true,
           count: count,
