@@ -45,7 +45,7 @@ function saveLocalRegistrations(list: StoredRegistration[]) {
 }
 
 const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec'
+  'https://script.google.com/macros/s/AKfycbx4-f4ywC14JGtbwV7Q2RAt5Yf7Jo6PdsMN6yseufqa3_I1CmTVEYBO74caibjSc_w9/exec'
 
 export function normalizeGasRegistration(raw: Record<string, any>): StoredRegistration {
   const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -209,26 +209,63 @@ export const apiService = {
     console.log("Submitting registration to /api/register");
 
     try {
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          data: registrationPayload,
-        }),
-      });
+      let result: any = null;
 
-      const responseText = await response.text();
-
-      console.log("API status:", response.status);
-      console.log("API response:", responseText);
-
-      let result: any;
       try {
-        result = JSON.parse(responseText);
-      } catch (error) {
-        console.error("Invalid API response:", responseText);
+        const response = await fetch("/api/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            data: registrationPayload,
+          }),
+        });
+
+        const responseText = await response.text();
+        console.log("API status:", response.status);
+        console.log("API response:", responseText);
+
+        try {
+          const parsed = JSON.parse(responseText);
+          if (parsed && typeof parsed === 'object') {
+            if (response.ok || parsed.errorCode || parsed.success !== undefined) {
+              result = parsed;
+            }
+          }
+        } catch {
+          console.warn("Could not parse /api/register response as JSON:", responseText);
+        }
+      } catch (fetchErr) {
+        console.warn("Direct fetch to /api/register failed, attempting Google Apps Script fallback:", fetchErr);
+      }
+
+      // If /api/register failed, returned invalid response or backend error, fall back directly to Google Apps Script Web App
+      if (!result || (result.success === false && (result.stage === 'backend' || result.stage === 'auth' || result.stage === 'dev_server'))) {
+        console.log("Submitting registration directly to Google Apps Script fallback:", DEFAULT_GAS_URL);
+        try {
+          const gasResponse = await fetch(DEFAULT_GAS_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "text/plain;charset=utf-8",
+            },
+            body: JSON.stringify({
+              action: "SUBMIT_REGISTRATION",
+              data: registrationPayload,
+              ...registrationPayload,
+            }),
+          });
+          const gasText = await gasResponse.text();
+          result = JSON.parse(gasText);
+        } catch (gasErr: any) {
+          console.error("Direct Google Apps Script fallback error:", gasErr);
+          if (!result) {
+            throw new Error("Registration could not be completed. Please check your network and try again.");
+          }
+        }
+      }
+
+      if (!result) {
         throw new Error(
           "Registration server returned an invalid response."
         );

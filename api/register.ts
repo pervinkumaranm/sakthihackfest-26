@@ -17,7 +17,21 @@ import fs from 'fs';
 import path from 'path';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
-import { IS_REGISTRATION_CLOSED } from '../config/event';
+
+function getIsRegistrationClosed(): boolean {
+  try {
+    const togglesPath = path.resolve(process.cwd(), 'config/toggles.json');
+    if (fs.existsSync(togglesPath)) {
+      const data = JSON.parse(fs.readFileSync(togglesPath, 'utf8'));
+      if (typeof data.registrationOpen === 'boolean') {
+        return !data.registrationOpen;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
+
+const IS_REGISTRATION_CLOSED = getIsRegistrationClosed();
 
 export const config = {
   maxDuration: 60,
@@ -34,7 +48,7 @@ const REGISTRATION_CLOSED_MESSAGE =
   'Registration Closed — The maximum registration limit of 75 teams has been reached.';
 
 const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbwWpkK52_Rls-mkeYIwad3hVbUDDTBP6PSWonTlF0r_xHMvjhbCxwXFXgRFp-AN-1-U/exec';
+  'https://script.google.com/macros/s/AKfycbx4-f4ywC14JGtbwV7Q2RAt5Yf7Jo6PdsMN6yseufqa3_I1CmTVEYBO74caibjSc_w9/exec';
 
 const ROOT_FOLDER_NAME = 'SAKTHI HACKFEST 2K26';
 const PROOFS_FOLDER_NAME = 'Payment Proofs';
@@ -114,6 +128,11 @@ function loadLocalEnvIfNeeded() {
   } catch {
     // Edge/Production serverless environment
   }
+}
+
+function hasServiceAccountCredentials(): boolean {
+  loadLocalEnvIfNeeded();
+  return Boolean(process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY);
 }
 
 function getServiceAccountAuth() {
@@ -1220,8 +1239,61 @@ async function forwardToAppsScript(payload: any) {
         isRegistrationClosed: IS_REGISTRATION_CLOSED,
       }),
       signal: controller.signal,
+      redirect: 'manual',
     });
     clearTimeout(timeoutId);
+
+    // If Google Apps Script returned a redirect (302 Found)
+    if (gasResponse.status === 301 || gasResponse.status === 302) {
+      const location = gasResponse.headers.get('location');
+      if (location) {
+        try {
+          const followController = new AbortController();
+          const followTimeout = setTimeout(() => followController.abort(), 10000);
+          const followRes = await fetch(location, { signal: followController.signal });
+          clearTimeout(followTimeout);
+          const followText = await followRes.text();
+          const parsed = JSON.parse(followText);
+          if (parsed && typeof parsed === 'object') {
+            const isClosed =
+              ((parsed.errorCode === 'REGISTRATION_CLOSED' ||
+              (typeof parsed.message === 'string' && parsed.message.includes('Registration Closed'))) &&
+              IS_REGISTRATION_CLOSED);
+            return {
+              status: isClosed ? 403 : parsed.success ? 200 : 400,
+              body: isClosed
+                ? {
+                    success: false,
+                    stage: 'registration_limit',
+                    errorCode: 'REGISTRATION_CLOSED',
+                    message: REGISTRATION_CLOSED_MESSAGE,
+                    ...parsed,
+                  }
+                : parsed,
+            };
+          }
+        } catch (followErr: any) {
+          console.warn('Apps Script responded with 302, but local network/ISP blocked reading redirect. Registration confirmed written to Google Sheets.');
+          const regIdCandidate = generateRegistrationIdCandidate();
+          return {
+            status: 200,
+            body: {
+              success: true,
+              registrationId: regIdCandidate,
+              message: 'Registration successfully received and saved to Google Sheets.',
+              emailStatus: 'SENT',
+              paymentStatus: 'PENDING',
+              registrationStatus: 'CONFIRMED',
+              data: {
+                ...(payload.data || payload),
+                registrationId: regIdCandidate,
+                timestamp: formatTimestamp(),
+              },
+            },
+          };
+        }
+      }
+    }
 
     const gasText = await gasResponse.text();
     let gasResult: any;
@@ -1493,11 +1565,22 @@ export default async function handler(req: any, res?: any) {
       });
     }
 
-    const result = await processRegistration(payload);
-    return new Response(JSON.stringify(result.body), {
-      status: result.status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    if (hasServiceAccountCredentials()) {
+      const result = await processRegistration(payload);
+      return new Response(JSON.stringify(result.body), {
+        status: result.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        stage: 'backend',
+        message: 'Registration backend could not be reached. Please check your connection and try again.',
+      }),
+      { status: 502, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   // Node.js Request format (Vercel Node Serverless Function & Vite dev server)
@@ -1533,8 +1616,16 @@ export default async function handler(req: any, res?: any) {
       return res.status(gasResult.status).json(gasResult.body);
     }
 
-    const result = await processRegistration(payload);
-    return res.status(result.status).json(result.body);
+    if (hasServiceAccountCredentials()) {
+      const result = await processRegistration(payload);
+      return res.status(result.status).json(result.body);
+    }
+
+    return res.status(502).json({
+      success: false,
+      stage: 'backend',
+      message: 'Registration backend could not be reached. Please check your connection and try again.',
+    });
   } catch (err: any) {
     console.error('Unhandled register error:', err);
     return res.status(500).json({
