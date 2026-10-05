@@ -547,7 +547,7 @@ function buildConfirmationEmailHtml(d: {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 16px;">
                 <tr>
                   <td align="center" style="padding: 4px 0 10px 0;">
-                    <img src="data:image/jpeg;base64,${SSEC_LOGO_BASE64}" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;" />
+                    <img src="https://cdn.jsdelivr.net/gh/pervinkumaranm/sakthihackfest-26@main/public/ssec-email-logo-opt.jpg" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;" />
                   </td>
                 </tr>
               </table>

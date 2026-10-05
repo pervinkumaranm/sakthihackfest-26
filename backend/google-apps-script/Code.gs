@@ -876,15 +876,6 @@ function sendConfirmationEmail(data) {
   const htmlBody = buildConfirmationEmailHtml(data);
   const plainTextBody = buildConfirmationEmailPlainText(data);
 
-  // Prepare inline CID logo without file extension so Gmail renders it inline without attachment chip
-  let inlineImages = {};
-  try {
-    const logoBlob = Utilities.newBlob(Utilities.base64Decode(SSEC_LOGO_BASE64), "image/jpeg", "Sree Sakthi Engineering College");
-    inlineImages["ii_1a0f3c65b505ce282231"] = logoBlob;
-  } catch (err) {
-    Logger.log("Notice: inline logo blob error: " + err.message);
-  }
-
   // Send ONLY to Team Leader Email - from sakthihackfest@gmail.com
   MailApp.sendEmail({
     to: data.leaderEmail,
@@ -892,8 +883,7 @@ function sendConfirmationEmail(data) {
     replyTo: CONFIG.OFFICIAL_EMAIL,
     subject: subject,
     body: plainTextBody,
-    htmlBody: htmlBody,
-    inlineImages: inlineImages
+    htmlBody: htmlBody
   });
 }
 
@@ -966,7 +956,7 @@ function buildConfirmationEmailHtml(d) {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 16px;">
                 <tr>
                   <td align="center" style="padding: 4px 0 10px 0;">
-                    <img src="cid:ii_1a0f3c65b505ce282231" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;">
+                    <img src="https://cdn.jsdelivr.net/gh/pervinkumaranm/sakthihackfest-26@main/public/ssec-email-logo-opt.jpg" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;">
                   </td>
                 </tr>
               </table>
