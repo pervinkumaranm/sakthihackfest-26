@@ -876,6 +876,15 @@ function sendConfirmationEmail(data) {
   const htmlBody = buildConfirmationEmailHtml(data);
   const plainTextBody = buildConfirmationEmailPlainText(data);
 
+  // Prepare inline CID logo for Gmail compatibility (prevents broken image icon)
+  let inlineImages = {};
+  try {
+    const logoBlob = Utilities.newBlob(Utilities.base64Decode(SSEC_LOGO_BASE64), "image/jpeg", "college-logo.jpg");
+    inlineImages["collegeLogo"] = logoBlob;
+  } catch (err) {
+    Logger.log("Notice: inline logo blob error: " + err.message);
+  }
+
   // Send ONLY to Team Leader Email - from sakthihackfest@gmail.com
   MailApp.sendEmail({
     to: data.leaderEmail,
@@ -883,7 +892,8 @@ function sendConfirmationEmail(data) {
     replyTo: CONFIG.OFFICIAL_EMAIL,
     subject: subject,
     body: plainTextBody,
-    htmlBody: htmlBody
+    htmlBody: htmlBody,
+    inlineImages: inlineImages
   });
 }
 
@@ -956,7 +966,7 @@ function buildConfirmationEmailHtml(d) {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 16px;">
                 <tr>
                   <td align="center" style="padding: 4px 0 10px 0;">
-                    <img src="https://cdn.jsdelivr.net/gh/pervinkumaranm/sakthihackfest-26@main/public/ssec-email-logo-opt.jpg" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;">
+                    <img src="cid:collegeLogo" alt="Sree Sakthi Engineering College" width="550" style="display: block; width: 100%; max-width: 550px; height: auto; border: 0; margin: 0 auto;">
                   </td>
                 </tr>
               </table>
@@ -1513,6 +1523,20 @@ function testEmail() {
     `
   });
   Logger.log("TEST EMAIL SENT TO: " + targetEmail);
+}
+
+function testConfirmationEmail() {
+  const targetEmail = "jeevaadhithyan007@gmail.com";
+  sendConfirmationEmail({
+    registrationId: "SHF26-TEST-" + Math.floor(1000 + Math.random() * 9000),
+    teamName: "Test Team Logo Check",
+    leaderName: "Jeevanandh Duraisamy",
+    leaderEmail: targetEmail,
+    teamMemberNames: "Jeevanandh Duraisamy, Test Member",
+    selectedDomain: "Generative AI",
+    accommodationRequired: "No"
+  });
+  Logger.log("Full confirmation email with CDN logo sent to: " + targetEmail);
 }
 
 function testDrive() {

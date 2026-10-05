@@ -673,13 +673,22 @@ function sendAccommodationConfirmationEmail(data) {
   const htmlBody = buildAccommodationEmailHtml(data);
   const plainTextBody = buildAccommodationEmailPlainText(data);
 
+  let inlineImages = {};
+  try {
+    const logoBlob = Utilities.newBlob(Utilities.base64Decode(ACCOM_SSEC_LOGO_BASE64), "image/jpeg", "college-logo.jpg");
+    inlineImages["collegeLogo"] = logoBlob;
+  } catch (err) {
+    console.warn("Notice: inline logo blob error:", err);
+  }
+
   MailApp.sendEmail({
     to: data.teamLeaderEmail,
     name: ACCOMMODATION_CONFIG.EMAIL_SENDER_NAME,
     replyTo: ACCOMMODATION_CONFIG.OFFICIAL_EMAIL,
     subject: subject,
     body: plainTextBody,
-    htmlBody: htmlBody
+    htmlBody: htmlBody,
+    inlineImages: inlineImages
   });
 }
 
@@ -738,7 +747,7 @@ function buildAccommodationEmailHtml(d) {
 '        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">' +
 '          <tr>' +
 '            <td style="background-color: #ffffff; padding: 24px 20px 16px 20px; text-align: center; border-bottom: 1px solid #e2e8f0;">' +
-'              <img src="https://cdn.jsdelivr.net/gh/pervinkumaranm/sakthihackfest-26@main/public/ssec-email-logo-opt.jpg" alt="Sree Sakthi Engineering College" style="width: 100%; max-width: 540px; height: auto; display: block; margin: 0 auto;" border="0">' +
+'              <img src="cid:collegeLogo" alt="Sree Sakthi Engineering College" style="width: 100%; max-width: 540px; height: auto; display: block; margin: 0 auto;" border="0">' +
 '            </td>' +
 '          </tr>' +
 '          <tr>' +
