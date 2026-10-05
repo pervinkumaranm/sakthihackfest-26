@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, Upload, CheckCircle2, AlertCircle,
   Loader2, ShieldCheck, RefreshCw, Trash2,
   Users, Phone, Mail, FileText, ArrowRight, User,
-  Sparkles, Globe, Palette, Coins, Lock, X, ExternalLink
+  Sparkles, Globe, Palette, Coins, Lock, X, ExternalLink, Info
 } from 'lucide-react'
 import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/eventConfig'
 import { registrationFormSchema, RegistrationFormValues, ACADEMIC_YEARS } from '../../config/registrationSchema'
@@ -433,13 +433,12 @@ export default function Register() {
             {STEP_LABELS.map((label, i) => (
               <div
                 key={i}
-                className={`font-mono text-[10px] tracking-wider transition-colors ${
-                  step === i + 1
+                className={`font-mono text-[10px] tracking-wider transition-colors ${step === i + 1
                     ? 'text-brand-primary font-bold'
                     : step > i + 1
-                    ? 'text-emerald-400'
-                    : 'text-brand-muted'
-                }`}
+                      ? 'text-emerald-400'
+                      : 'text-brand-muted'
+                  }`}
               >
                 {step > i + 1 ? '✓ ' : ''}0{i + 1}. {label}
               </div>
@@ -517,11 +516,10 @@ export default function Register() {
                             type="button"
                             key={opt.value}
                             onClick={() => setValue('teamSize', opt.value, { shouldValidate: true })}
-                            className={`py-3.5 px-3 rounded-lg border text-center font-mono text-xs sm:text-sm tracking-wider transition-all duration-200 flex flex-col items-center justify-center gap-1 ${
-                              isSelected
+                            className={`py-3.5 px-3 rounded-lg border text-center font-mono text-xs sm:text-sm tracking-wider transition-all duration-200 flex flex-col items-center justify-center gap-1 ${isSelected
                                 ? 'border-brand-primary bg-brand-primary/15 text-white shadow-[0_0_15px_rgba(255,59,48,0.25)] font-bold'
                                 : 'border-brand-border bg-brand-bg text-brand-muted hover:border-brand-border/90 hover:text-white'
-                            }`}
+                              }`}
                           >
                             <Users size={16} className={isSelected ? 'text-brand-primary' : 'text-brand-muted'} />
                             <span>{opt.label}</span>
@@ -552,26 +550,23 @@ export default function Register() {
                             type="button"
                             key={domain.name}
                             onClick={() => setValue('selectedDomain', domain.name, { shouldValidate: true })}
-                            className={`p-3.5 rounded-lg border text-left font-mono tracking-wider transition-all duration-200 flex flex-col justify-between gap-2.5 cursor-pointer relative group ${
-                              isSelected
+                            className={`p-3.5 rounded-lg border text-left font-mono tracking-wider transition-all duration-200 flex flex-col justify-between gap-2.5 cursor-pointer relative group ${isSelected
                                 ? 'border-brand-primary bg-brand-primary/15 text-white shadow-[0_0_15px_rgba(255,59,48,0.25)] font-bold'
                                 : 'border-brand-border bg-brand-bg text-brand-muted hover:border-brand-border/90 hover:text-white'
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center justify-between w-full">
                               <div
-                                className={`p-2 rounded-md transition-colors ${
-                                  isSelected
+                                className={`p-2 rounded-md transition-colors ${isSelected
                                     ? 'bg-brand-primary/20 text-brand-primary'
                                     : 'bg-brand-card text-brand-muted group-hover:text-white'
-                                }`}
+                                  }`}
                               >
                                 <IconComponent size={16} />
                               </div>
                               <span
-                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${
-                                  isSelected ? 'border-brand-primary' : 'border-brand-muted/40'
-                                }`}
+                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'border-brand-primary' : 'border-brand-muted/40'
+                                  }`}
                               >
                                 {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-brand-primary" />}
                               </span>
@@ -599,11 +594,10 @@ export default function Register() {
                             type="button"
                             key={opt}
                             onClick={() => setValue('accommodationRequired', opt, { shouldValidate: true })}
-                            className={`py-3 px-4 rounded-lg border text-center font-mono text-xs sm:text-sm tracking-wider transition-all duration-200 flex items-center justify-center gap-2.5 ${
-                              isSelected
+                            className={`py-3 px-4 rounded-lg border text-center font-mono text-xs sm:text-sm tracking-wider transition-all duration-200 flex items-center justify-center gap-2.5 ${isSelected
                                 ? 'border-brand-primary bg-brand-primary/15 text-white shadow-[0_0_15px_rgba(255,59,48,0.25)] font-bold'
                                 : 'border-brand-border bg-brand-bg text-brand-muted hover:border-brand-border/90 hover:text-white'
-                            }`}
+                              }`}
                           >
                             <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected ? 'border-brand-primary' : 'border-brand-muted/60'}`}>
                               {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-brand-primary" />}
@@ -614,6 +608,23 @@ export default function Register() {
                       })}
                     </div>
                     <FieldError message={errors.accommodationRequired?.message} />
+
+                    <div className="mt-3 p-3 rounded-lg bg-brand-bg/60 border border-brand-border/80 flex items-start gap-2.5 max-w-xl">
+                      <Info size={15} className="text-brand-primary shrink-0 mt-0.5" />
+                      <p className="font-mono text-xs text-brand-muted leading-relaxed">
+                        This accommodation option is for 9th October. If you require accommodation for the previous day, please use the{' '}
+                        <Link
+                          to="/accommodation-form"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-primary underline underline-offset-2 hover:text-brand-primaryLight font-bold transition-colors inline-flex items-center gap-0.5"
+                        >
+                          Accommodation Page
+                          <ExternalLink size={11} className="inline shrink-0" />
+                        </Link>{' '}
+                        after completing registration process.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
