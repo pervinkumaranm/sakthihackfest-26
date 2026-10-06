@@ -16,6 +16,7 @@ import ManageRegistrations from './pages/admin/ManageRegistrations'
 
 import LiveTimer from './pages/LiveTimer'
 import WinnerLeaderboard from './pages/WinnerLeaderboard'
+import AttendancePage from './pages/attendance/AttendancePage'
 
 import { SettingsProvider } from './context/SettingsContext'
 
@@ -26,6 +27,8 @@ export default function App() {
   const isAdmin =
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/manage-registrations')
+
+  const isAttendance = location.pathname.startsWith('/attendance')
 
   const isStageScreen =
     location.pathname === '/timer' ||
@@ -44,7 +47,7 @@ export default function App() {
     <SettingsProvider>
       <div className="min-h-screen bg-brand-bg text-brand-text relative">
       <ScrollToTop />
-      {!isAdmin && !isStageScreen && <Navbar />}
+      {!isAdmin && !isStageScreen && !isAttendance && <Navbar />}
       <motion.div
         key={location.pathname}
         initial={{ opacity: 0 }}
@@ -68,13 +71,17 @@ export default function App() {
             {/* Live Grand Finale Winner Reveal Screen */}
             <Route path="/leaderboard" element={<WinnerLeaderboard />} />
             <Route path="/winners" element={<WinnerLeaderboard />} />
+            {/* Dedicated Student Volunteer Team QR Attendance Desk */}
+            <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/attendance/scan" element={<Navigate to="/attendance" replace />} />
+            <Route path="/attendance/login" element={<Navigate to="/attendance" replace />} />
             {/* Private Admin Route */}
             <Route path="/manage-registrations" element={<ManageRegistrations />} />
             <Route path="/admin" element={<Navigate to="/manage-registrations" replace />} />
             <Route path="/admin/login" element={<Navigate to="/manage-registrations" replace />} />
           </Routes>
         </motion.div>
-      {!isAdmin && !isStageScreen && <Footer />}
+      {!isAdmin && !isStageScreen && !isAttendance && <Footer />}
       </div>
     </SettingsProvider>
   )

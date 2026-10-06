@@ -34,7 +34,7 @@ interface TeamEvaluation {
 }
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
-  const { setLocalSettings } = useAppSettings()
+  const { setLocalSettings, refreshSettings } = useAppSettings()
 
   // Enforce noindex metadata on Admin Dashboard
   useEffect(() => {
@@ -479,6 +479,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         }
         setFormSettings(newSettings)
         setLocalSettings(newSettings)
+        refreshSettings().catch(() => {})
         setActionFeedback({
           type: 'success',
           message: `${key === 'registrationOpen' ? 'Registration Form' : 'Accommodation Form'} is now ${updatedVal ? 'ENABLED (ON)' : 'DISABLED (OFF)'}`

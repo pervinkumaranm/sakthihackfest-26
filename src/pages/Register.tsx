@@ -12,6 +12,7 @@ import {
 import { EVENT_CONFIG, IS_REGISTRATION_CLOSED } from '../../config/eventConfig'
 import { registrationFormSchema, RegistrationFormValues, ACADEMIC_YEARS } from '../../config/registrationSchema'
 import { apiService } from '../services/api'
+import { useAppSettings } from '../context/SettingsContext'
 
 const HACKATHON_DOMAINS_CONFIG = [
   { name: 'Generative AI', icon: Sparkles },
@@ -41,6 +42,7 @@ function FieldError({ message }: { message?: string }) {
 
 export default function Register() {
   const navigate = useNavigate()
+  const { registrationOpen } = useAppSettings()
   const [step, setStep] = useState<Step>(1)
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
@@ -49,9 +51,9 @@ export default function Register() {
   const [screenshotFileName, setScreenshotFileName] = useState('')
   const [screenshotError, setScreenshotError] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [isRegistrationClosed, setIsRegistrationClosed] = useState(IS_REGISTRATION_CLOSED)
+  const [isRegistrationClosed, setIsRegistrationClosed] = useState(!registrationOpen)
   const [registeredCount, setRegisteredCount] = useState<number | null>(null)
-  const [showClosedModal, setShowClosedModal] = useState(IS_REGISTRATION_CLOSED)
+  const [showClosedModal, setShowClosedModal] = useState(!registrationOpen)
   const [checkingStatus, setCheckingStatus] = useState(true)
   const [showQrModal, setShowQrModal] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -130,7 +132,7 @@ export default function Register() {
           if (status && typeof status.count === 'number') {
             setRegisteredCount(status.count)
           }
-          const closed = settings ? !settings.registrationOpen : IS_REGISTRATION_CLOSED
+          const closed = !registrationOpen || (settings ? !settings.registrationOpen : true)
           setIsRegistrationClosed(closed)
           setShowClosedModal(closed)
         }
@@ -144,7 +146,14 @@ export default function Register() {
     return () => {
       active = false
     }
-  }, [])
+  }, [registrationOpen])
+
+  useEffect(() => {
+    if (!registrationOpen) {
+      setIsRegistrationClosed(true)
+      setShowClosedModal(true)
+    }
+  }, [registrationOpen])
 
   // File upload handling
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,8 +247,8 @@ export default function Register() {
     // Prevent double submission
     if (submitting) return
 
-    // Strict registration limit guard governed by live toggle
-    if (isRegistrationClosed) {
+    // Strict registration guard governed by live Google Sheet toggle
+    if (!registrationOpen || isRegistrationClosed) {
       setShowClosedModal(true)
       return
     }

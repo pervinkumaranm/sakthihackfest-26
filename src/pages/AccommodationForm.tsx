@@ -176,6 +176,11 @@ export default function AccommodationForm() {
 
   // Step 4: Submission
   const handleSubmitAccommodation = async () => {
+    if (!accommodationOpen || isFormClosed) {
+      setSubmitError('Accommodation registration is currently closed. Submissions are not being accepted.')
+      return
+    }
+
     if (!selectedTeam) return
 
     if (selectedMembers.length === 0) {

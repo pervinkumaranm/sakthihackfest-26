@@ -16,12 +16,13 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use(async (req, res, next) => {
             const isRegister = req.url === '/api/register' || req.url?.startsWith('/api/register?') || req.url?.startsWith('/api/register/')
             const isAdmin = req.url === '/api/admin' || req.url?.startsWith('/api/admin?')
+            const isAttendance = req.url === '/api/attendance' || req.url?.startsWith('/api/attendance?')
             const isTimer = req.url === '/api/timer' || req.url?.startsWith('/api/timer')
             const isWinners = req.url === '/api/winners' || req.url?.startsWith('/api/winners')
             const isAccommodation = req.url === '/api/accommodation' || req.url?.startsWith('/api/accommodation?')
             const isSettings = req.url === '/api/settings' || req.url?.startsWith('/api/settings?')
 
-            if (isRegister || isAdmin || isTimer || isWinners || isAccommodation || isSettings) {
+            if (isRegister || isAdmin || isAttendance || isTimer || isWinners || isAccommodation || isSettings) {
               // Reload environment variables from .env on every request
               const currentEnv = loadEnv(mode, process.cwd(), '')
               Object.assign(process.env, currentEnv)
@@ -37,6 +38,8 @@ export default defineConfig(({ mode }) => {
                     ? '/api/register.ts'
                     : isAdmin
                     ? '/api/admin.ts'
+                    : isAttendance
+                    ? '/api/attendance.ts'
                     : isTimer
                     ? '/api/timer.ts'
                     : isWinners

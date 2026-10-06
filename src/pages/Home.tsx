@@ -3,6 +3,7 @@ import EventIntro from '../components/EventIntro'
 import ChallengeCards from '../components/ChallengeCards'
 import WhyParticipate from '../components/WhyParticipate'
 import Timeline from '../components/Timeline'
+import SponsorCarousel from '../components/SponsorCarousel'
 import PrizeSection from '../components/PrizeSection'
 import FinalCTA from '../components/FinalCTA'
 import RegistrationClosedModal from '../components/RegistrationClosedModal'
@@ -18,6 +19,7 @@ export default function Home() {
       <ChallengeCards />
       <WhyParticipate />
       <Timeline />
+      <SponsorCarousel />
       <PrizeSection />
       <FinalCTA />
     </main>

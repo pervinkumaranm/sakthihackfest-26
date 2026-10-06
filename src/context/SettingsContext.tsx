@@ -1,24 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { apiService } from '../services/api'
 import type { AppSettings } from '../types'
-import { IS_REGISTRATION_CLOSED } from '../../config/event'
 
 interface SettingsContextValue {
   registrationOpen: boolean
   accommodationOpen: boolean
   loading: boolean
   lastUpdated: string
+  updatedBy?: string
   refreshSettings: () => Promise<void>
   setLocalSettings: (next: Partial<AppSettings>) => void
 }
 
-const defaultRegistrationOpen = !IS_REGISTRATION_CLOSED
+// Requirement 7: Authoritative initial state is FALSE for both until live Google Sheet is fetched
+const INITIAL_SETTINGS: AppSettings = {
+  registrationOpen: false,
+  accommodationOpen: false,
+  lastUpdated: '',
+  updatedBy: '',
+}
 
 const SettingsContext = createContext<SettingsContextValue>({
-  registrationOpen: defaultRegistrationOpen,
-  accommodationOpen: true,
+  registrationOpen: false,
+  accommodationOpen: false,
   loading: false,
   lastUpdated: '',
+  updatedBy: '',
   refreshSettings: async () => {},
   setLocalSettings: () => {},
 })
@@ -34,11 +41,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (_) {}
-    return {
-      registrationOpen: defaultRegistrationOpen,
-      accommodationOpen: true,
-      lastUpdated: new Date().toISOString(),
-    }
+    return INITIAL_SETTINGS
   })
   const [loading, setLoading] = useState(true)
 
@@ -52,7 +55,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         } catch (_) {}
       }
     } catch (err) {
-      console.warn('Could not fetch live form settings:', err)
+      console.warn('Could not fetch live form settings from Google Sheet:', err)
     } finally {
       setLoading(false)
     }
@@ -61,7 +64,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchLiveSettings()
 
-    // Listen to custom cross-component update events (fired when Admin toggles a setting)
+    // Listen to cross-component toggle updates (fired when Admin toggles a setting)
     const handleUpdate = (e: CustomEvent<AppSettings>) => {
       if (e.detail) {
         setSettings((prev: AppSettings) => {
@@ -74,10 +77,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Also sync on focus and periodically
     window.addEventListener('shf_settings_updated' as any, handleUpdate as any)
     window.addEventListener('focus', fetchLiveSettings)
-    const interval = setInterval(fetchLiveSettings, 15000)
+    const interval = setInterval(fetchLiveSettings, 20000)
 
     return () => {
       window.removeEventListener('shf_settings_updated' as any, handleUpdate as any)
@@ -103,6 +105,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         accommodationOpen: settings.accommodationOpen,
         loading,
         lastUpdated: settings.lastUpdated || '',
+        updatedBy: settings.updatedBy || '',
         refreshSettings: fetchLiveSettings,
         setLocalSettings,
       }}

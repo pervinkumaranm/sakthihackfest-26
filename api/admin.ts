@@ -194,11 +194,12 @@ function getAdminSecret(): string {
   );
 }
 
-function generateAdminToken(username: string): { token: string; expiresAt: number } {
+function generateAdminToken(username: string, role = 'SUPER_ADMIN'): { token: string; expiresAt: number } {
   const secret = getAdminSecret();
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours validity
   const payload = JSON.stringify({
     u: username,
+    role,
     exp: expiresAt,
     salt: crypto.randomBytes(8).toString('hex'),
   });
@@ -211,7 +212,7 @@ function generateAdminToken(username: string): { token: string; expiresAt: numbe
   return { token, expiresAt };
 }
 
-function verifyAdminToken(token?: string): { valid: boolean; username?: string } {
+function verifyAdminToken(token?: string): { valid: boolean; username?: string; role?: string } {
   if (!token) return { valid: false };
   const parts = token.split('.');
   if (parts.length !== 2) return { valid: false };
@@ -232,7 +233,7 @@ function verifyAdminToken(token?: string): { valid: boolean; username?: string }
     if (!payload.exp || Date.now() > payload.exp) {
       return { valid: false }; // Expired
     }
-    return { valid: true, username: payload.u };
+    return { valid: true, username: payload.u, role: payload.role || 'SUPER_ADMIN' };
   } catch {
     return { valid: false };
   }
@@ -406,16 +407,8 @@ export default async function handler(req: any, res: any) {
 
     let authenticated = false;
 
-    // Check against environment credentials if set
+    // Check against environment credentials strictly
     if (envUser && envPass && cleanUser.toLowerCase() === envUser.toLowerCase() && cleanPass === envPass) {
-      authenticated = true;
-    }
-    // Also accept authorized standard organizers login credentials
-    if (
-      (cleanUser.toLowerCase() === 'shf@26' && cleanPass === 'SSEC@SHF26') ||
-      (cleanUser.toLowerCase() === 'admin' && cleanPass === 'SSEC@SHF26') ||
-      (cleanUser.toLowerCase() === 'admin@sakthihackfest.in' && cleanPass === 'SSEC@SHF26')
-    ) {
       authenticated = true;
     }
 
@@ -445,6 +438,13 @@ export default async function handler(req: any, res: any) {
     return res.status(401).json({
       success: false,
       error: 'Session expired or unauthorized. Please log in again.',
+    });
+  }
+
+  if (auth.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({
+      success: false,
+      error: 'Unauthorized. Attendance volunteer accounts cannot access the administrator management dashboard.',
     });
   }
 

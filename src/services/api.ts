@@ -978,7 +978,7 @@ export const apiService = {
     }
   },
 
-  // ── Form Toggles Management ───────────────────────────────────────────────
+  // ── Form Toggles Management (Single Source of Truth: Google Sheet GID 1835819612) ──
   async getFormSettings(): Promise<AppSettings> {
     let localCached: AppSettings | null = null
     try {
@@ -992,14 +992,18 @@ export const apiService = {
     } catch (_) {}
 
     try {
-      const res = await fetch('/api/settings')
+      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      })
       if (res.ok) {
         const json = await res.json()
         if (json.success) {
           const settings: AppSettings = {
-            registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : (json.settings?.registrationOpen ?? !IS_REGISTRATION_CLOSED),
-            accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : (json.settings?.accommodationOpen ?? true),
+            registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : Boolean(json.settings?.registrationOpen),
+            accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : Boolean(json.settings?.accommodationOpen),
             lastUpdated: json.lastUpdated || json.settings?.lastUpdated || new Date().toISOString(),
+            updatedBy: json.updatedBy || json.settings?.updatedBy || 'admin',
           }
           try {
             localStorage.setItem('shf26_app_settings', JSON.stringify(settings))
@@ -1011,16 +1015,18 @@ export const apiService = {
 
     // Fallback: If /api/settings is unreachable, try direct Google Apps Script GET_TOGGLES
     try {
-      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_TOGGLES`, {
-        signal: AbortSignal.timeout(3500),
+      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_TOGGLES&_t=${Date.now()}`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(4500),
       })
       if (gasRes.ok) {
         const gasJson = await gasRes.json()
         if (gasJson.success) {
           const settings: AppSettings = {
-            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : true,
-            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : true,
+            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : false,
+            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : false,
             lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
+            updatedBy: gasJson.updatedBy || 'admin',
           }
           try {
             localStorage.setItem('shf26_app_settings', JSON.stringify(settings))
@@ -1035,8 +1041,8 @@ export const apiService = {
     }
 
     return {
-      registrationOpen: !IS_REGISTRATION_CLOSED,
-      accommodationOpen: true,
+      registrationOpen: false,
+      accommodationOpen: false,
     }
   },
 

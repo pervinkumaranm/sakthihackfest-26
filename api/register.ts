@@ -18,20 +18,34 @@ import path from 'path';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 
-function getIsRegistrationClosed(): boolean {
+let cachedRegistrationOpen: { value: boolean; timestamp: number } | null = null;
+
+async function checkIsRegistrationOpen(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedRegistrationOpen && now - cachedRegistrationOpen.timestamp < 2500) {
+    return cachedRegistrationOpen.value;
+  }
+
+  // Check Google Apps Script (Single source of truth: Google Sheet GID 1835819612)
   try {
-    const togglesPath = path.resolve(process.cwd(), 'config/toggles.json');
-    if (fs.existsSync(togglesPath)) {
-      const data = JSON.parse(fs.readFileSync(togglesPath, 'utf8'));
-      if (typeof data.registrationOpen === 'boolean') {
-        return !data.registrationOpen;
+    const gasUrl = getActiveGasUrl();
+    if (gasUrl) {
+      const res = await fetch(`${gasUrl}?action=GET_TOGGLES&_t=${now}`, {
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(4500),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (typeof json.registrationOpen === 'boolean') {
+          cachedRegistrationOpen = { value: json.registrationOpen, timestamp: now };
+          return json.registrationOpen;
+        }
       }
     }
   } catch (_) {}
-  return false;
-}
 
-const IS_REGISTRATION_CLOSED = getIsRegistrationClosed();
+  return false; // Default false per requirement 7
+}
 
 export const config = {
   maxDuration: 60,
@@ -910,10 +924,23 @@ async function processRegistration(rawPayload: any) {
     };
   }
 
-  // Enforce Atomic 75-team registration limit strictly when IS_REGISTRATION_CLOSED is true
+  // Enforce Live Google Sheet Registration Toggle & Atomic Limit
   const currentRegisteredCount = getSuccessfullyRegisteredCount(existingRows, headers);
-  console.log(`Current registered teams count: ${currentRegisteredCount} / ${MAX_REGISTRATION_LIMIT} (IS_REGISTRATION_CLOSED: ${IS_REGISTRATION_CLOSED})`);
-  if (IS_REGISTRATION_CLOSED && currentRegisteredCount >= MAX_REGISTRATION_LIMIT) {
+  const isRegOpen = await checkIsRegistrationOpen();
+  if (!isRegOpen) {
+    return {
+      status: 403,
+      body: {
+        success: false,
+        stage: 'registration_toggle',
+        errorCode: 'REGISTRATION_CLOSED',
+        message: 'Registration Closed — Registration is currently closed by the organizers.',
+        count: currentRegisteredCount,
+        limit: MAX_REGISTRATION_LIMIT,
+      },
+    };
+  }
+  if (currentRegisteredCount >= MAX_REGISTRATION_LIMIT) {
     return {
       status: 403,
       body: {
@@ -1329,6 +1356,9 @@ async function forwardToAppsScript(payload: any) {
 }
 
 async function getRegistrationStatusCount() {
+  const isRegOpen = await checkIsRegistrationOpen();
+  const isClosed = !isRegOpen;
+
   // 1. Try Apps Script
   const gasUrl = getActiveGasUrl();
 
@@ -1345,8 +1375,8 @@ async function getRegistrationStatusCount() {
             success: true,
             count: data.count,
             limit: MAX_REGISTRATION_LIMIT,
-            isRegistrationClosed: IS_REGISTRATION_CLOSED,
-            message: IS_REGISTRATION_CLOSED
+            isRegistrationClosed: isClosed,
+            message: isClosed
               ? REGISTRATION_CLOSED_MESSAGE
               : 'Registration Open',
           };
@@ -1367,8 +1397,8 @@ async function getRegistrationStatusCount() {
       success: true,
       count,
       limit: MAX_REGISTRATION_LIMIT,
-      isRegistrationClosed: IS_REGISTRATION_CLOSED,
-      message: IS_REGISTRATION_CLOSED
+      isRegistrationClosed: isClosed,
+      message: isClosed
         ? REGISTRATION_CLOSED_MESSAGE
         : 'Registration Open',
     };
@@ -1377,7 +1407,7 @@ async function getRegistrationStatusCount() {
       success: false,
       count: 0,
       limit: MAX_REGISTRATION_LIMIT,
-      isRegistrationClosed: IS_REGISTRATION_CLOSED,
+      isRegistrationClosed: isClosed,
       message: 'Could not fetch live registration count.',
     };
   }
@@ -1604,6 +1634,17 @@ export default async function handler(req: any, res?: any) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+  }
+
+  // Server-side guard: check live Google Sheet toggle before processing any registration
+  const isRegOpen = await checkIsRegistrationOpen();
+  if (!isRegOpen) {
+    return res.status(403).json({
+      success: false,
+      stage: 'registration_toggle',
+      errorCode: 'REGISTRATION_CLOSED',
+      message: 'Registration Closed — Registration is currently closed by the organizers.',
+    });
   }
 
   try {

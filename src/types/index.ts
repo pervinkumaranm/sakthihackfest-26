@@ -118,4 +118,5 @@ export interface AppSettings {
   registrationOpen: boolean
   accommodationOpen: boolean
   lastUpdated?: string
+  updatedBy?: string
 }

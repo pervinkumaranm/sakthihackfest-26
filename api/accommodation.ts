@@ -21,7 +21,6 @@ const DEFAULT_GAS_REG_URL =
   'https://script.google.com/macros/s/AKfycbx4-f4ywC14JGtbwV7Q2RAt5Yf7Jo6PdsMN6yseufqa3_I1CmTVEYBO74caibjSc_w9/exec';
 
 const ACCOMMODATIONS_FILE = path.resolve(process.cwd(), 'config/accommodations.json');
-const TOGGLES_FILE = path.resolve(process.cwd(), 'config/toggles.json');
 
 function loadLocalEnvIfNeeded() {
   try {
@@ -105,12 +104,13 @@ async function isAccommodationOpen(): Promise<boolean> {
     return cachedAccommodationOpen.value;
   }
 
-  // 1. Check Google Apps Script (central persistent source of truth)
+  // Check Google Apps Script (Single source of truth: Google Sheet GID 1835819612)
   try {
     const gasUrl = getAccommodationGasUrl();
     if (gasUrl) {
-      const res = await fetch(`${gasUrl}?action=GET_TOGGLES`, {
-        signal: AbortSignal.timeout(2500),
+      const res = await fetch(`${gasUrl}?action=GET_TOGGLES&_t=${now}`, {
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(4500),
       });
       if (res.ok) {
         const json = await res.json();
@@ -122,30 +122,8 @@ async function isAccommodationOpen(): Promise<boolean> {
     }
   } catch (_) {}
 
-  // 2. Check /tmp/toggles.json if present
-  try {
-    const tmpFile = '/tmp/toggles.json';
-    if (fs.existsSync(tmpFile)) {
-      const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
-      if (typeof parsed.accommodationOpen === 'boolean') {
-        cachedAccommodationOpen = { value: parsed.accommodationOpen, timestamp: now };
-        return parsed.accommodationOpen;
-      }
-    }
-  } catch (_) {}
-
-  // 3. Check TOGGLES_FILE in repository bundle
-  try {
-    if (fs.existsSync(TOGGLES_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(TOGGLES_FILE, 'utf8'));
-      if (typeof parsed.accommodationOpen === 'boolean') {
-        cachedAccommodationOpen = { value: parsed.accommodationOpen, timestamp: now };
-        return parsed.accommodationOpen;
-      }
-    }
-  } catch (_) {}
-
-  return true;
+  // Safe authoritative default: false
+  return false;
 }
 
 function readLocalAccommodations(): any[] {

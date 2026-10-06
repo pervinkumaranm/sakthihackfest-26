@@ -1,0 +1,55 @@
+{
+  "records": [
+    {
+      "teamCode": "SHF26-TEST99",
+      "teamName": "Test Innovators",
+      "members": [
+        {
+          "name": "Karthik",
+          "college": "Sree Sakthi Engineering College",
+          "status": "Present"
+        },
+        {
+          "name": "Ananya",
+          "college": "Sree Sakthi Engineering College",
+          "status": "Present"
+        },
+        {
+          "name": "Rohit",
+          "college": "Sree Sakthi Engineering College",
+          "status": "Present"
+        }
+      ],
+      "totalPresent": 3,
+      "totalMembers": 3,
+      "timestamp": "07/10/2026, 00:51:59",
+      "markedBy": "volunteer"
+    },
+    {
+      "teamCode": "SHF26-XM73ED",
+      "teamName": "Synovate",
+      "members": [
+        {
+          "name": "ARAVINDHAN S",
+          "college": "ERODE SENGUNTHAR ENGINEERING COLLEGE",
+          "status": "Present"
+        },
+        {
+          "name": "SOBIKA G",
+          "college": "Shree Venkateshwara Hi-Tech Engineering College",
+          "status": "Present"
+        },
+        {
+          "name": "RESHMA M",
+          "college": "Shree Venkateshwara Hi-Tech Engineering College",
+          "status": "Present"
+        }
+      ],
+      "totalPresent": 3,
+      "totalMembers": 3,
+      "timestamp": "07/10/2026, 00:58:13",
+      "markedBy": "volunteer"
+    }
+  ],
+  "lastUpdated": "2026-10-06T19:28:13.503Z"
+}
