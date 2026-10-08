@@ -1,8 +1,8 @@
 /**
- * SAKTHI HACKFEST 2K26 — Google Sheet Form Toggles Management API
+ * SAKTHI HACKFEST 2K26 — Supabase Form Toggles Management API
  * Endpoint: /api/settings
  *
- * Single Source of Truth: Google Spreadsheet Tab (GID: 1835819612)
+ * Single Source of Truth: Supabase PostgreSQL (app_settings table)
  *
  * Persistently controls:
  * - Registration Form [ON / OFF]
@@ -14,6 +14,7 @@
 import path from 'path';
 import fs from 'fs';
 import crypto from 'node:crypto';
+import { getTogglesFromDb, setTogglesInDb, isSupabaseConfigured } from './_supabase';
 
 export const config = {
   maxDuration: 15,
@@ -23,13 +24,10 @@ interface TogglesState {
   registrationOpen: boolean;
   accommodationOpen: boolean;
   lastUpdated: string;
-  updatedBy?: string;
+  updatedBy: string;
 }
 
-const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbx4-f4ywC14JGtbwV7Q2RAt5Yf7Jo6PdsMN6yseufqa3_I1CmTVEYBO74caibjSc_w9/exec';
-
-// Fast short-lived in-memory cache to prevent spamming Google Sheets API while guaranteeing fresh data
+// Fast short-lived in-memory cache to optimize performance
 let cachedToggles: TogglesState = {
   registrationOpen: false,
   accommodationOpen: false,
@@ -37,7 +35,7 @@ let cachedToggles: TogglesState = {
   updatedBy: 'system',
 };
 let cacheTimestamp = 0;
-const CACHE_TTL_MS = 2500; // 2.5 seconds cache TTL
+const CACHE_TTL_MS = 2000; // 2 seconds
 
 function loadLocalEnvIfNeeded() {
   try {
@@ -51,9 +49,7 @@ function loadLocalEnvIfNeeded() {
         if (eqIdx !== -1) {
           const key = trimmed.slice(0, eqIdx).trim();
           let val = trimmed.slice(eqIdx + 1).trim();
-          if (val.startsWith('"') && val.endsWith('"')) {
-            val = val.slice(1, -1);
-          } else if (val.startsWith("'") && val.endsWith("'")) {
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
             val = val.slice(1, -1);
           }
           if (val && !process.env[key]) {
@@ -63,15 +59,6 @@ function loadLocalEnvIfNeeded() {
       });
     }
   } catch (_) {}
-}
-
-function getGasUrl(): string {
-  loadLocalEnvIfNeeded();
-  return (
-    process.env.GAS_WEB_APP_URL ||
-    process.env.VITE_GOOGLE_SCRIPT_URL ||
-    DEFAULT_GAS_URL
-  );
 }
 
 function getAdminSecret(): string {
@@ -109,7 +96,7 @@ function verifyAdminToken(token?: string): { valid: boolean; username?: string }
 }
 
 /**
- * Fetch authoritative toggle values directly from Google Sheet via Apps Script
+ * Fetch authoritative toggle values directly from Supabase
  */
 async function fetchAuthoritativeToggles(forceRefresh = false): Promise<TogglesState> {
   const now = Date.now();
@@ -117,106 +104,65 @@ async function fetchAuthoritativeToggles(forceRefresh = false): Promise<TogglesS
     return cachedToggles;
   }
 
-  const gasUrl = getGasUrl();
-  try {
-    const res = await fetch(`${gasUrl}?action=GET_TOGGLES&_t=${now}`, {
-      method: 'GET',
-      headers: { 'Cache-Control': 'no-cache' },
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json && (typeof json.registrationOpen === 'boolean' || typeof json.accommodationOpen === 'boolean')) {
-        cachedToggles = {
-          registrationOpen: Boolean(json.registrationOpen),
-          accommodationOpen: Boolean(json.accommodationOpen),
-          lastUpdated: json.lastUpdated || new Date().toISOString(),
-          updatedBy: json.updatedBy || 'admin',
-        };
-        cacheTimestamp = now;
-        return cachedToggles;
-      }
+  if (isSupabaseConfigured()) {
+    try {
+      const dbState = await getTogglesFromDb();
+      cachedToggles = dbState;
+      cacheTimestamp = now;
+      return cachedToggles;
+    } catch (err) {
+      console.warn('Error reading toggles from Supabase:', err);
     }
-  } catch (err) {
-    console.warn('Error reading authoritative toggles from Google Sheet:', err);
   }
 
-  // If cache exists and not expired long ago, reuse it; otherwise default safely to false
-  if (cacheTimestamp > 0) {
-    return cachedToggles;
-  }
-
-  return {
-    registrationOpen: false,
-    accommodationOpen: false,
-    lastUpdated: new Date().toISOString(),
-    updatedBy: 'system',
-  };
+  return cachedToggles;
 }
 
 /**
- * Persistently update toggle values into the Google Sheet via Apps Script
+ * Persistently update toggle values into Supabase
  */
 async function updateAuthoritativeToggles(
   updates: { registrationOpen?: boolean; accommodationOpen?: boolean },
   updatedBy: string
 ): Promise<{ success: boolean; state?: TogglesState; error?: string }> {
-  const gasUrl = getGasUrl();
-
   try {
-    const res = await fetch(gasUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'SET_TOGGLES',
-        registrationOpen: updates.registrationOpen,
-        accommodationOpen: updates.accommodationOpen,
-        updatedBy,
-      }),
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Google Apps Script responded with HTTP ${res.status}`);
-    }
-
-    const json = await res.json();
-    if (json && json.success) {
-      const newState: TogglesState = {
-        registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : Boolean(updates.registrationOpen),
-        accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : Boolean(updates.accommodationOpen),
-        lastUpdated: json.lastUpdated || new Date().toISOString(),
-        updatedBy: json.updatedBy || updatedBy,
-      };
-
-      // Invalidate cache immediately
+    if (isSupabaseConfigured()) {
+      const newState = await setTogglesInDb(updates, updatedBy);
       cachedToggles = newState;
       cacheTimestamp = Date.now();
       return { success: true, state: newState };
-    } else {
-      return { success: false, error: json?.error || 'Google Sheet update rejected.' };
     }
+
+    // Fallback if Supabase credentials pending
+    cachedToggles = {
+      registrationOpen: typeof updates.registrationOpen === 'boolean' ? updates.registrationOpen : cachedToggles.registrationOpen,
+      accommodationOpen: typeof updates.accommodationOpen === 'boolean' ? updates.accommodationOpen : cachedToggles.accommodationOpen,
+      lastUpdated: new Date().toISOString(),
+      updatedBy,
+    };
+    cacheTimestamp = Date.now();
+    return { success: true, state: cachedToggles };
   } catch (err: any) {
-    console.error('Failed to write toggles to Google Sheet:', err);
-    return { success: false, error: err.message || 'Network error updating Google Sheet.' };
+    console.error('Failed to write toggles to Supabase:', err);
+    return { success: false, error: err.message || 'Error updating Supabase app_settings.' };
   }
 }
 
 export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  // Prevent aggressive caching on browser and CDN proxies
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+  if (typeof res?.setHeader === 'function') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // GET: Public fetch of authoritative form status from Google Sheet
+  // GET: Public fetch of authoritative form status from Supabase
   if (req.method === 'GET') {
     const force = req.query?.force === 'true';
     const state = await fetchAuthoritativeToggles(force);
@@ -230,7 +176,7 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  // POST: Admin toggle update directly to Google Sheet
+  // POST: Admin toggle update directly to Supabase
   if (req.method === 'POST') {
     const authHeader = req.headers.authorization || req.headers.Authorization;
     let token = '';
@@ -261,7 +207,7 @@ export default async function handler(req: any, res: any) {
     if (result.success && result.state) {
       return res.status(200).json({
         success: true,
-        message: 'Toggle Google Sheet updated successfully.',
+        message: 'Toggle settings updated successfully in Supabase.',
         settings: result.state,
         registrationOpen: result.state.registrationOpen,
         accommodationOpen: result.state.accommodationOpen,
@@ -272,7 +218,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(500).json({
       success: false,
-      error: result.error || 'Failed to update Google Sheet.',
+      error: result.error || 'Failed to update toggle settings.',
     });
   }
 

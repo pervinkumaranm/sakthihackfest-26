@@ -119,7 +119,7 @@ export default function AttendanceForm({
         </h2>
 
         <p className="text-sm text-brand-muted mt-1">
-          Attendance has been saved to the event database & Google Sheet.
+          Attendance has been saved to the event database.
         </p>
 
         {/* Team Summary Card */}
@@ -188,7 +188,7 @@ export default function AttendanceForm({
 
               <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-sans">
                 Are you sure you want to update this team's attendance status? This will update the
-                Google Sheet timestamp and record.
+                event database record.
               </div>
 
               <div className="mt-6 flex gap-3">
@@ -371,7 +371,7 @@ export default function AttendanceForm({
                 {submitting ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>SAVING TO GOOGLE SHEET...</span>
+                    <span>SAVING ATTENDANCE...</span>
                   </>
                 ) : (
                   <>

@@ -1,6 +1,7 @@
 /**
  * SAKTHI HACKFEST 2K26 — Attendance API Client Service
  * Handles volunteer authentication, team lookup, attendance submission, and status checking.
+ * Directly interfaces with the Supabase-backed /api/attendance serverless endpoints.
  */
 
 export interface AttendanceMember {
@@ -27,9 +28,6 @@ export interface AttendanceRecord {
   timestamp: string;
   markedBy: string;
 }
-
-const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbx4-f4ywC14JGtbwV7Q2RAt5Yf7Jo6PdsMN6yseufqa3_I1CmTVEYBO74caibjSc_w9/exec';
 
 class AttendanceService {
   private tokenKey = 'shf26_attendance_token';
@@ -91,59 +89,11 @@ class AttendanceService {
       if (res.ok && data.success && data.team) {
         return { success: true, team: data.team };
       }
-      return { success: false, error: data.error || 'Team not found.' };
+      return { success: false, error: data.error || `Team Code "${teamCode}" not found.` };
     } catch (err: any) {
-      console.warn('Backend get_team error, trying direct Apps Script fallback:', err);
+      console.error('Backend get_team error:', err);
+      return { success: false, error: 'Failed to look up team. Please check network connection.' };
     }
-
-    // Direct Google Apps Script fallback
-    try {
-      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`);
-      if (gasRes.ok) {
-        const gasJson = await gasRes.json();
-        if (gasJson && gasJson.success && Array.isArray(gasJson.data)) {
-          const match = gasJson.data.find((item: any) => {
-            const rawId = String(item['Registration ID'] || item.registrationId || item.registrationid || '').trim().toUpperCase();
-            return rawId === teamCode.trim().toUpperCase();
-          });
-          if (match) {
-            const teamName = String(match['Team Name'] || match.teamName || match.teamname || '').trim();
-            const leaderName = String(match['Team Leader Name'] || match.teamLeaderName || match.leaderName || '').trim();
-            const leaderCollege = String(
-              match['Leader College Name'] || match['Team Leader College Name'] || match.leaderCollege || 'N/A'
-            ).trim();
-
-            const membersList: Array<{ name: string; college: string }> = [];
-            if (leaderName) {
-              membersList.push({ name: leaderName, college: leaderCollege || 'N/A' });
-            }
-
-            for (let m = 2; m <= 4; m++) {
-              const mName = String(match[`Member ${m} Name`] || match[`member${m}Name`] || match[`member${m}name`] || '').trim();
-              const mCollege = String(
-                match[`Member ${m} College Name`] || match[`Member ${m} College`] || match[`member${m}College`] || leaderCollege || 'N/A'
-              ).trim();
-              if (mName && mName.toLowerCase() !== 'none' && mName.toLowerCase() !== 'null') {
-                membersList.push({ name: mName, college: mCollege || leaderCollege || 'N/A' });
-              }
-            }
-
-            return {
-              success: true,
-              team: {
-                teamCode: teamCode.trim().toUpperCase(),
-                teamName: teamName || 'Registered Team',
-                members: membersList,
-              },
-            };
-          }
-        }
-      }
-    } catch (gasErr) {
-      console.error('Direct GAS team lookup failed:', gasErr);
-    }
-
-    return { success: false, error: `Team Code "${teamCode}" not found in registration database.` };
   }
 
   async checkAttendance(teamCode: string): Promise<{ success: boolean; exists: boolean; record?: AttendanceRecord }> {
@@ -164,17 +114,6 @@ class AttendanceService {
     } catch (e) {
       console.warn('Check attendance API error:', e);
     }
-
-    // Direct Apps Script fallback
-    try {
-      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=CHECK_ATTENDANCE&teamCode=${encodeURIComponent(teamCode)}`);
-      if (gasRes.ok) {
-        const gasJson = await gasRes.json();
-        if (gasJson && gasJson.success) {
-          return { success: true, exists: Boolean(gasJson.exists), record: gasJson.record };
-        }
-      }
-    } catch (_) {}
 
     return { success: true, exists: false };
   }

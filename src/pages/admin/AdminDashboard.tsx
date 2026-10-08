@@ -1006,7 +1006,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <button
                 onClick={() => loadData(true)}
                 disabled={loading || refreshing}
-                title="Refresh Real Google Sheet Data"
+                title="Refresh Live Database"
                 className="p-2 sm:px-3 sm:py-2 rounded-xl border border-brand-border bg-brand-card hover:bg-brand-surface text-brand-muted hover:text-white transition-all text-xs font-mono flex items-center gap-2 disabled:opacity-50"
               >
                 <RefreshCw size={15} className={refreshing ? 'animate-spin text-brand-primary' : ''} />
@@ -1432,7 +1432,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         SELECT OFFICIAL WINNERS (FROM ACTUAL REGISTRATION TEAMS)
                       </div>
                       <p className="text-[11px] text-brand-muted font-mono mt-0.5">
-                        Winners are linked directly to live Google Sheet records. No fake names allowed.
+                        Winners are linked directly to live database records. No fake names allowed.
                       </p>
                     </div>
 
@@ -2462,7 +2462,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="p-16 text-center">
                   <RefreshCw size={32} className="animate-spin text-purple-400 mx-auto mb-3" />
                   <div className="font-mono text-sm text-brand-muted tracking-wider">
-                    FETCHING REAL ACCOMMODATION REQUESTS FROM GOOGLE SHEETS...
+                    FETCHING REAL ACCOMMODATION REQUESTS FROM DATABASE...
                   </div>
                 </div>
               ) : filteredAccommodations.length === 0 ? (
@@ -2527,7 +2527,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 </span>
                               </div>
                               <div className="flex flex-wrap gap-1">
-                                {item.selectedMembers.map((m, idx) => (
+                                {(item.selectedMembers || []).map((m, idx) => (
                                   <span
                                     key={idx}
                                     className="inline-block px-1.5 py-0.5 rounded bg-brand-surface border border-brand-border text-[10px] font-mono text-white"
@@ -2693,7 +2693,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <span className="text-white font-bold">{item.numberOfMembers} members</span>
                           </div>
                           <div className="flex flex-wrap gap-1">
-                            {item.selectedMembers.map((m, idx) => (
+                            {(item.selectedMembers || []).map((m, idx) => (
                               <span key={idx} className="px-1.5 py-0.5 rounded bg-brand-surface text-[10px] font-mono text-white border border-brand-border">
                                 ✓ {m}
                               </span>
@@ -2761,7 +2761,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="font-display font-black text-2xl sm:text-3xl text-white">
                   {loading ? '...' : computedStats.totalRegistrations}
                 </div>
-                <div className="font-mono text-[10px] text-brand-muted mt-1">Live Google Sheet</div>
+                <div className="font-mono text-[10px] text-brand-muted mt-1">Live Database</div>
               </div>
 
               {/* 2. TOTAL TEAMS */}
@@ -3008,7 +3008,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="p-16 text-center">
                   <RefreshCw size={32} className="animate-spin text-brand-primary mx-auto mb-3" />
                   <div className="font-mono text-sm text-brand-muted tracking-wider">
-                    FETCHING REAL RECORDS FROM GOOGLE SHEETS...
+                    FETCHING REAL RECORDS FROM DATABASE...
                   </div>
                 </div>
               ) : filteredRegistrations.length === 0 ? (
@@ -3880,7 +3880,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   Are you sure you want to delete registration <span className="text-brand-primary font-mono font-bold">{deletingReg.registrationId}</span> for team <strong className="text-white">"{deletingReg.teamName}"</strong>?
                 </p>
                 <p className="text-[11px] text-red-400/80 pt-1 font-mono">
-                  This will remove the row from the live Google Sheet database.
+                  This will remove the registration from the live database.
                 </p>
               </div>
 
@@ -4190,7 +4190,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </span>
                   </div>
                   <div className="space-y-1.5">
-                    {selectedAccommodation.selectedMembers.map((name, i) => (
+                    {(selectedAccommodation.selectedMembers || []).map((name, i) => (
                       <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-brand-surface border border-brand-border text-xs">
                         <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
                         <span className="font-medium text-white">{name}</span>
@@ -4332,7 +4332,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="text-white font-bold">{verifyingAccommodation.teamName}</div>
                 <div className="text-cyan-400">Team Code: {verifyingAccommodation.teamCode}</div>
                 <div className="text-brand-muted">
-                  Members: {verifyingAccommodation.numberOfMembers} ({verifyingAccommodation.selectedMembers.join(', ')})
+                  Members: {verifyingAccommodation.numberOfMembers || verifyingAccommodation.memberCount} ({(verifyingAccommodation.selectedMembers || []).join(', ')})
                 </div>
                 <div className="text-green-400 font-bold pt-1">
                   Amount: ₹{verifyingAccommodation.totalAmount} (UPI: {verifyingAccommodation.upiTransactionId})

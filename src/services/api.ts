@@ -44,8 +44,6 @@ function saveLocalRegistrations(list: StoredRegistration[]) {
   }
 }
 
-const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbx4-f4ywC14JGtbwV7Q2RAt5Yf7Jo6PdsMN6yseufqa3_I1CmTVEYBO74caibjSc_w9/exec'
 
 export function normalizeGasRegistration(raw: Record<string, any>): StoredRegistration {
   const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -224,45 +222,15 @@ export const apiService = {
 
         const responseText = await response.text();
         console.log("API status:", response.status);
-        console.log("API response:", responseText);
 
         try {
-          const parsed = JSON.parse(responseText);
-          if (parsed && typeof parsed === 'object') {
-            if (response.ok || parsed.errorCode || parsed.success !== undefined) {
-              result = parsed;
-            }
-          }
+          result = JSON.parse(responseText);
         } catch {
           console.warn("Could not parse /api/register response as JSON:", responseText);
         }
       } catch (fetchErr) {
-        console.warn("Direct fetch to /api/register failed, attempting Google Apps Script fallback:", fetchErr);
-      }
-
-      // If /api/register failed, returned invalid response or backend error, fall back directly to Google Apps Script Web App
-      if (!result || (result.success === false && (result.stage === 'backend' || result.stage === 'auth' || result.stage === 'dev_server'))) {
-        console.log("Submitting registration directly to Google Apps Script fallback:", DEFAULT_GAS_URL);
-        try {
-          const gasResponse = await fetch(DEFAULT_GAS_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "text/plain;charset=utf-8",
-            },
-            body: JSON.stringify({
-              action: "SUBMIT_REGISTRATION",
-              data: registrationPayload,
-              ...registrationPayload,
-            }),
-          });
-          const gasText = await gasResponse.text();
-          result = JSON.parse(gasText);
-        } catch (gasErr: any) {
-          console.error("Direct Google Apps Script fallback error:", gasErr);
-          if (!result) {
-            throw new Error("Registration could not be completed. Please check your network and try again.");
-          }
-        }
+        console.error("Direct fetch to /api/register failed:", fetchErr);
+        throw new Error("Registration could not be completed. Please check your network and try again.");
       }
 
       if (!result) {
@@ -358,7 +326,7 @@ export const apiService = {
             success: true,
             count: data.count,
             limit: data.limit || 75,
-            isRegistrationClosed: IS_REGISTRATION_CLOSED,
+            isRegistrationClosed: Boolean(data.isRegistrationClosed),
             message: data.message,
           }
         }
@@ -366,24 +334,6 @@ export const apiService = {
     } catch (err) {
       console.warn('Could not query /api/register count:', err)
     }
-
-    // Direct Apps Script query fallback
-    try {
-      const gasUrl = `${DEFAULT_GAS_URL}?action=GET_COUNT`
-      const res = await fetch(gasUrl)
-      if (res.ok) {
-        const data = await res.json()
-        if (data && typeof data.count === 'number') {
-          return {
-            success: true,
-            count: data.count,
-            limit: data.limit || 75,
-            isRegistrationClosed: IS_REGISTRATION_CLOSED,
-            message: data.message,
-          }
-        }
-      }
-    } catch (_) {}
 
     return {
       success: false,
@@ -475,26 +425,7 @@ export const apiService = {
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch registrations from /api/admin, falling back to Apps Script Web App:', err)
-    }
-
-    // Direct Google Apps Script fallback
-    try {
-      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
-      if (gasRes.ok) {
-        const gasJson = await gasRes.json()
-        if (gasJson && gasJson.success && Array.isArray(gasJson.data)) {
-          const registrations = gasJson.data
-            .map((item: any) => normalizeGasRegistration(item))
-            .filter((r: any) => Boolean(r.registrationId))
-
-          return {
-            registrations,
-          }
-        }
-      }
-    } catch (gasErr) {
-      console.error('Direct Google Apps Script fallback error:', gasErr)
+      console.warn('Failed to fetch registrations from /api/admin:', err)
     }
 
     return {
@@ -505,7 +436,7 @@ export const apiService = {
 
   /**
    * Fetch a single confirmed registration by its Registration ID
-   * Checks local cache -> queries /api/register -> falls back to Apps Script Web App
+   * Checks local cache -> queries /api/register
    */
   async getRegistrationById(id: string): Promise<StoredRegistration | null> {
     const cleanId = String(id || '').trim().toUpperCase()
@@ -533,29 +464,6 @@ export const apiService = {
       }
     } catch (e) {
       console.warn('Failed to fetch registration by ID from /api/register:', e)
-    }
-
-    // 3. Fallback direct to Google Apps Script Web App
-    try {
-      const res = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json && json.success && Array.isArray(json.data)) {
-          const match = json.data.find((item: any) => {
-            const rawId = String(item['Registration ID'] || item.registrationId || item.registrationid || '').trim().toUpperCase()
-            return rawId === cleanId
-          })
-          if (match) {
-            const record = normalizeGasRegistration(match)
-            const updatedList = getLocalRegistrations().filter(r => r.registrationId !== cleanId)
-            updatedList.unshift(record)
-            saveLocalRegistrations(updatedList)
-            return record
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Failed direct Apps Script lookup for registration ID:', e)
     }
 
     return null
@@ -781,8 +689,9 @@ export const apiService = {
       const res = await fetch('/api/accommodation?action=GET_TEAMS')
       if (res.ok) {
         const json = await res.json()
-        if (json.success && Array.isArray(json.data)) {
-          return json.data.map((t: any) => ({
+        const list = json.teams || json.data
+        if (json.success && Array.isArray(list)) {
+          return list.map((t: any) => ({
             teamCode: t.teamCode || t.registrationId,
             teamName: t.teamName,
           }))
@@ -791,23 +700,6 @@ export const apiService = {
     } catch (e) {
       console.warn('Failed to fetch teams from /api/accommodation:', e)
     }
-
-    // Direct Apps Script query fallback
-    try {
-      const res = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json.success && Array.isArray(json.data)) {
-          return json.data.map((item: any) => {
-            const reg = normalizeGasRegistration(item)
-            return {
-              teamCode: reg.registrationId,
-              teamName: reg.teamName,
-            }
-          }).filter((t: any) => Boolean(t.teamCode && t.teamName))
-        }
-      }
-    } catch (_) {}
 
     return []
   },
@@ -819,44 +711,15 @@ export const apiService = {
         const json = await res.json()
         if (json.success && Array.isArray(json.members)) {
           return {
-            teamCode: json.teamCode,
-            teamName: json.teamName,
-            members: json.members,
+            teamCode: json.team?.teamCode || json.teamCode || teamCode,
+            teamName: json.team?.teamName || json.teamName || 'Registered Team',
+            members: json.members.map((m: any) => (typeof m === 'string' ? m : m.name)),
           }
         }
       }
     } catch (e) {
       console.warn('Failed to fetch team members from /api/accommodation:', e)
     }
-
-    // Direct Apps Script fallback
-    try {
-      const res = await fetch(`${DEFAULT_GAS_URL}?action=GET_REGISTRATIONS`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json.success && Array.isArray(json.data)) {
-          const item = json.data.find((raw: any) => {
-            const reg = normalizeGasRegistration(raw)
-            return (reg.registrationId || '').toUpperCase() === teamCode.toUpperCase()
-          })
-          if (item) {
-            const reg = normalizeGasRegistration(item)
-            const members: string[] = []
-            if (reg.leaderName) members.push(reg.leaderName)
-            if (reg.members) {
-              reg.members.forEach(m => {
-                if (m.name && !members.includes(m.name)) members.push(m.name)
-              })
-            }
-            return {
-              teamCode: reg.registrationId,
-              teamName: reg.teamName,
-              members,
-            }
-          }
-        }
-      }
-    } catch (_) {}
 
     return null
   },
@@ -882,53 +745,11 @@ export const apiService = {
         }),
       })
       const result = await res.json()
-      // Resilient fallback: If /api/accommodation returns ACCOMMODATION_CLOSED or error,
-      // submit directly to Google Apps Script
-      if (!result.success && (result.errorCode === 'ACCOMMODATION_CLOSED' || res.status >= 400)) {
-        try {
-          const gasRes = await fetch(DEFAULT_GAS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              action: 'SUBMIT_ACCOMMODATION',
-              data: {
-                ...data,
-                paymentScreenshotBase64: data.paymentScreenshotData,
-              },
-            }),
-            signal: AbortSignal.timeout(35000),
-          })
-          const gasResult = await gasRes.json()
-          if (gasResult && gasResult.success) {
-            return gasResult
-          }
-        } catch (_) {}
-      }
       return result
     } catch (err: any) {
-      // Network error to /api/accommodation: try direct GAS submission
-      try {
-        const gasRes = await fetch(DEFAULT_GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'SUBMIT_ACCOMMODATION',
-            data: {
-              ...data,
-              paymentScreenshotBase64: data.paymentScreenshotData,
-            },
-          }),
-          signal: AbortSignal.timeout(35000),
-        })
-        const gasResult = await gasRes.json()
-        if (gasResult && gasResult.success) {
-          return gasResult
-        }
-      } catch (_) {}
-
       return {
         success: false,
-        error: err.message || 'Failed to submit accommodation request.',
+        error: err.message || 'Failed to submit accommodation request. Please check your network connection.',
       }
     }
   },
@@ -1013,29 +834,6 @@ export const apiService = {
       }
     } catch (_) {}
 
-    // Fallback: If /api/settings is unreachable, try direct Google Apps Script GET_TOGGLES
-    try {
-      const gasRes = await fetch(`${DEFAULT_GAS_URL}?action=GET_TOGGLES&_t=${Date.now()}`, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(4500),
-      })
-      if (gasRes.ok) {
-        const gasJson = await gasRes.json()
-        if (gasJson.success) {
-          const settings: AppSettings = {
-            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : false,
-            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : false,
-            lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
-            updatedBy: gasJson.updatedBy || 'admin',
-          }
-          try {
-            localStorage.setItem('shf26_app_settings', JSON.stringify(settings))
-          } catch (_) {}
-          return settings
-        }
-      }
-    } catch (_) {}
-
     if (localCached) {
       return localCached
     }
@@ -1060,8 +858,8 @@ export const apiService = {
       const json = await res.json()
       if (json && json.success) {
         const updatedSettings: AppSettings = {
-          registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : (json.settings?.registrationOpen ?? (settings.registrationOpen !== undefined ? settings.registrationOpen : true)),
-          accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : (json.settings?.accommodationOpen ?? (settings.accommodationOpen !== undefined ? settings.accommodationOpen : true)),
+          registrationOpen: typeof json.registrationOpen === 'boolean' ? json.registrationOpen : (json.settings?.registrationOpen ?? (settings.registrationOpen !== undefined ? settings.registrationOpen : false)),
+          accommodationOpen: typeof json.accommodationOpen === 'boolean' ? json.accommodationOpen : (json.settings?.accommodationOpen ?? (settings.accommodationOpen !== undefined ? settings.accommodationOpen : false)),
           lastUpdated: json.lastUpdated || new Date().toISOString(),
         }
         try {
@@ -1076,72 +874,8 @@ export const apiService = {
         }
       }
 
-      // If /api/settings returned failure (e.g. auth issue on Vercel), attempt direct GAS sync as resilient fallback
-      try {
-        const gasRes = await fetch(DEFAULT_GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'SET_TOGGLES',
-            registrationOpen: settings.registrationOpen,
-            accommodationOpen: settings.accommodationOpen,
-          }),
-          signal: AbortSignal.timeout(4000),
-        })
-        const gasJson = await gasRes.json()
-        if (gasJson && gasJson.success) {
-          const updatedSettings: AppSettings = {
-            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : (settings.registrationOpen !== undefined ? settings.registrationOpen : true),
-            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : (settings.accommodationOpen !== undefined ? settings.accommodationOpen : true),
-            lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
-          }
-          try {
-            localStorage.setItem('shf26_app_settings', JSON.stringify(updatedSettings))
-          } catch (_) {}
-          window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: updatedSettings }))
-          return {
-            success: true,
-            settings: updatedSettings,
-            registrationOpen: updatedSettings.registrationOpen,
-            accommodationOpen: updatedSettings.accommodationOpen,
-          }
-        }
-      } catch (_) {}
-
       return json
     } catch (e: any) {
-      // Network error to /api/settings, try direct GAS
-      try {
-        const gasRes = await fetch(DEFAULT_GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'SET_TOGGLES',
-            registrationOpen: settings.registrationOpen,
-            accommodationOpen: settings.accommodationOpen,
-          }),
-          signal: AbortSignal.timeout(4000),
-        })
-        const gasJson = await gasRes.json()
-        if (gasJson && gasJson.success) {
-          const updatedSettings: AppSettings = {
-            registrationOpen: typeof gasJson.registrationOpen === 'boolean' ? gasJson.registrationOpen : (settings.registrationOpen !== undefined ? settings.registrationOpen : true),
-            accommodationOpen: typeof gasJson.accommodationOpen === 'boolean' ? gasJson.accommodationOpen : (settings.accommodationOpen !== undefined ? settings.accommodationOpen : true),
-            lastUpdated: gasJson.lastUpdated || new Date().toISOString(),
-          }
-          try {
-            localStorage.setItem('shf26_app_settings', JSON.stringify(updatedSettings))
-          } catch (_) {}
-          window.dispatchEvent(new CustomEvent('shf_settings_updated', { detail: updatedSettings }))
-          return {
-            success: true,
-            settings: updatedSettings,
-            registrationOpen: updatedSettings.registrationOpen,
-            accommodationOpen: updatedSettings.accommodationOpen,
-          }
-        }
-      } catch (_) {}
-
       return { success: false, error: e.message || 'Failed to update form settings.' }
     }
   },
