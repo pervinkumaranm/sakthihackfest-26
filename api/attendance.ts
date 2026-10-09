@@ -18,11 +18,46 @@ import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import process from 'node:process';
-import { getSupabase, isSupabaseConfigured } from './_supabase';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export const config = {
   maxDuration: 30,
 };
+
+let cachedSupabase: SupabaseClient | null = null;
+
+function getSupabase(): SupabaseClient {
+  if (cachedSupabase) return cachedSupabase;
+  loadLocalEnvIfNeeded();
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      'Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in environment variables.'
+    );
+  }
+
+  cachedSupabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+  return cachedSupabase;
+}
+
+function isSupabaseConfigured(): boolean {
+  loadLocalEnvIfNeeded();
+  return Boolean(
+    (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
+    (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)
+  );
+}
 
 function loadLocalEnvIfNeeded() {
   try {
@@ -123,61 +158,33 @@ function formatISTTimestamp(date = new Date()): string {
   }
 }
 
-export default async function handler(req: any, res?: any) {
-  const isEdge = req instanceof Request || (!res && typeof req.json === 'function');
-  const method = req.method;
+export default async function handler(req: any, res: any) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (method === 'OPTIONS') {
-    if (isEdge) {
-      return new Response(null, {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-      });
-    }
-    if (typeof res?.setHeader === 'function') {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      return res.status(200).end();
-    }
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
   const send = (status: number, data: any) => {
-    if (isEdge) {
-      return new Response(JSON.stringify(data), {
-        status,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-      });
-    }
-    if (typeof res?.setHeader === 'function') {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    }
     return res.status(status).json(data);
   };
 
-  loadLocalEnvIfNeeded();
-
-  let body: any = {};
   try {
-    body = isEdge
-      ? await req.json()
-      : (typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {});
-  } catch {
-    body = {};
-  }
+    loadLocalEnvIfNeeded();
 
-  const action = (body.action || req.query?.action || '').trim();
+    let body: any = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = {};
+      }
+    }
+    body = body || {};
+
+    const action = (body.action || req.query?.action || '').trim();
 
   // 1. Volunteer & Staff Authentication
   if (action === 'login') {
@@ -661,5 +668,12 @@ export default async function handler(req: any, res?: any) {
     }
   }
 
-  return send(400, { success: false, error: `Invalid action "${action}".` });
+    return send(400, { success: false, error: `Invalid action "${action}".` });
+  } catch (fatalErr: any) {
+    console.error('Unhandled Attendance API Error:', fatalErr);
+    return res.status(500).json({
+      success: false,
+      error: fatalErr?.message || 'Server error occurred in Attendance API.',
+    });
+  }
 }

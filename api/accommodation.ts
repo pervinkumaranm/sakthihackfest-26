@@ -20,11 +20,61 @@ import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import process from 'node:process';
-import { getSupabase, getTogglesFromDb, isSupabaseConfigured } from './_supabase';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export const config = {
   maxDuration: 30,
 };
+
+let cachedSupabase: SupabaseClient | null = null;
+
+function getSupabase(): SupabaseClient {
+  if (cachedSupabase) return cachedSupabase;
+  loadLocalEnvIfNeeded();
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase configuration.');
+  }
+
+  cachedSupabase = createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return cachedSupabase;
+}
+
+function isSupabaseConfigured(): boolean {
+  loadLocalEnvIfNeeded();
+  return Boolean(
+    (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
+    (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)
+  );
+}
+
+async function getTogglesFromDb(): Promise<{ registrationOpen: boolean; accommodationOpen: boolean }> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['registration_open', 'accommodation_open']);
+
+  if (error || !data) {
+    return { registrationOpen: false, accommodationOpen: false };
+  }
+
+  let registrationOpen = false;
+  let accommodationOpen = false;
+  for (const row of data) {
+    if (row.key === 'registration_open') registrationOpen = Boolean(row.value);
+    if (row.key === 'accommodation_open') accommodationOpen = Boolean(row.value);
+  }
+  return { registrationOpen, accommodationOpen };
+}
 
 function loadLocalEnvIfNeeded() {
   try {
