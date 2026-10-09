@@ -19,6 +19,18 @@ export interface AttendanceTeam {
   }>;
 }
 
+export interface AttendanceTeamItem {
+  teamCode: string;
+  teamName: string;
+}
+
+export interface AttendanceStats {
+  totalRegisteredTeams: number;
+  teamsMarkedAttendance: number;
+  studentsPresent: number;
+  studentsAbsent: number;
+}
+
 export interface AttendanceRecord {
   teamCode: string;
   teamName: string;
@@ -62,15 +74,67 @@ class AttendanceService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', username, password }),
       });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        return {
+          success: false,
+          error: res.status >= 500
+            ? 'Server error occurred during authentication. Please try again later.'
+            : (text || `Authentication failed with status ${res.status}.`),
+        };
+      }
+
       if (res.ok && data.success && data.token) {
         this.login(data.token, data.user?.username || username);
         return { success: true };
       }
-      return { success: false, error: data.error || 'Invalid credentials' };
+      return { success: false, error: data.error || 'Invalid volunteer credentials.' };
     } catch (e: any) {
       console.error('Attendance auth error:', e);
-      return { success: false, error: 'Network error occurred during authentication.' };
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      return {
+        success: false,
+        error: isOffline
+          ? 'Network offline. Please check your internet connection.'
+          : (e.message || 'Authentication request failed. Please check network connection.'),
+      };
+    }
+  }
+
+  async getTeams(): Promise<{ success: boolean; teams?: AttendanceTeamItem[]; error?: string }> {
+    const token = this.getToken();
+    try {
+      const res = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ action: 'get_teams' }),
+      });
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        return { success: false, error: 'Server error parsing team list.' };
+      }
+
+      if (res.ok && data.success && Array.isArray(data.teams)) {
+        return { success: true, teams: data.teams };
+      }
+      return { success: false, error: data.error || 'Failed to retrieve teams list.' };
+    } catch (err: any) {
+      console.error('getTeams error:', err);
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      return {
+        success: false,
+        error: isOffline
+          ? 'Network offline. Please check your internet connection.'
+          : (err.message || 'Failed to retrieve registered teams. Please try again.'),
+      };
     }
   }
 
@@ -172,7 +236,7 @@ class AttendanceService {
     }
   }
 
-  async getAllAttendance(): Promise<{ success: boolean; records: AttendanceRecord[]; stats?: any }> {
+  async getAllAttendance(): Promise<{ success: boolean; records: AttendanceRecord[]; stats?: AttendanceStats; error?: string }> {
     const token = this.getToken();
     try {
       const res = await fetch('/api/attendance', {
@@ -183,14 +247,21 @@ class AttendanceService {
         },
         body: JSON.stringify({ action: 'get_all_attendance' }),
       });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        return { success: false, records: [], error: 'Failed to parse attendance records.' };
+      }
+
       if (res.ok && data.success) {
         return { success: true, records: data.records || [], stats: data.stats };
       }
-    } catch (e) {
+      return { success: false, records: [], error: data.error || 'Failed to retrieve attendance.' };
+    } catch (e: any) {
       console.warn('getAllAttendance error:', e);
+      return { success: false, records: [], error: e.message || 'Network error retrieving attendance.' };
     }
-    return { success: false, records: [] };
   }
 }
 

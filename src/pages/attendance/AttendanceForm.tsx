@@ -135,10 +135,16 @@ export default function AttendanceForm({
             <span className="font-sans font-bold text-white">{team.teamName}</span>
           </div>
           <div className="flex justify-between items-center text-xs pt-1 border-t border-brand-border/40">
-            <span className="text-brand-muted font-mono uppercase">Turnout:</span>
-            <span className="font-mono font-bold text-emerald-400">
-              {presentCount} / {totalCount} Members Present
-            </span>
+            <span className="text-brand-muted font-mono uppercase">Registered Members:</span>
+            <span className="font-mono font-bold text-white">{totalCount}</span>
+          </div>
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-brand-muted font-mono uppercase">Present:</span>
+            <span className="font-mono font-bold text-emerald-400">{presentCount}</span>
+          </div>
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-brand-muted font-mono uppercase">Absent:</span>
+            <span className="font-mono font-bold text-rose-400">{totalCount - presentCount}</span>
           </div>
         </div>
 
@@ -149,7 +155,7 @@ export default function AttendanceForm({
             onClick={onScanNext}
             className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-brand-primary to-brand-orange text-white font-display font-bold text-sm tracking-wide shadow-lg shadow-brand-primary/20 hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
           >
-            <span>SCAN NEXT TEAM →</span>
+            <span>SELECT NEXT TEAM →</span>
           </button>
         </div>
       </motion.div>
@@ -221,13 +227,18 @@ export default function AttendanceForm({
             className="inline-flex items-center gap-1.5 text-xs font-mono text-brand-muted hover:text-white transition-colors"
           >
             <ArrowLeft size={14} />
-            <span>BACK TO SCANNER</span>
+            <span>BACK TO TEAM SELECTION</span>
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-brand-muted">Turnout:</span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-brand-primary/10 border border-brand-primary/30 text-brand-primary">
-              {presentCount} / {totalCount} Present
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
+              Total: {totalCount}
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+              Present: {presentCount}
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-500/10 border border-rose-500/30 text-rose-400">
+              Absent: {totalCount - presentCount}
             </span>
           </div>
         </div>
@@ -389,7 +400,7 @@ export default function AttendanceForm({
                 onClick={onScanNext}
                 className="flex-1 py-3 px-4 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-xs sm:text-sm font-mono font-bold uppercase tracking-wider transition-colors order-1 sm:order-2"
               >
-                Scan Next Team →
+                Select Next Team →
               </button>
             )}
           </div>

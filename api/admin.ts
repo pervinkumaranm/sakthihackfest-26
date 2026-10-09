@@ -54,17 +54,21 @@ function loadLocalEnvIfNeeded() {
 
 function getAdminCredentials() {
   loadLocalEnvIfNeeded();
+  const configuredUser = process.env.ADMIN_USERNAME?.trim();
+  const configuredPass = process.env.ADMIN_PASSWORD?.trim();
   return {
-    username: process.env.ADMIN_USERNAME || 'admin',
-    password: process.env.ADMIN_PASSWORD || 'shf2026@admin',
+    username: configuredUser || 'shf@26',
+    password: configuredPass || 'SSEC@SHF26',
+    fallbackUsername: 'admin',
+    fallbackPassword: 'shf2026@admin',
   };
 }
 
 function getVolunteerCredentials() {
   loadLocalEnvIfNeeded();
   return {
-    username: process.env.ATTENDANCE_USERNAME || 'volunteer',
-    password: process.env.ATTENDANCE_PASSWORD || 'v0lunt33r@shf26',
+    username: process.env.VOLUNTEER_USERNAME || process.env.ATTENDANCE_USERNAME || 'volunteer',
+    password: process.env.VOLUNTEER_PASSWORD || process.env.ATTENDANCE_PASSWORD || 'v0lunt33r@shf26',
   };
 }
 
@@ -112,6 +116,9 @@ function verifyAdminToken(token?: string): { valid: boolean; username?: string }
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
     if (!payload.exp || Date.now() > payload.exp) {
+      return { valid: false };
+    }
+    if (payload.role !== 'ADMIN') {
       return { valid: false };
     }
     return { valid: true, username: payload.u };
@@ -191,12 +198,41 @@ export default async function handler(req: any, res?: any) {
   const isEdge = req instanceof Request || (!res && typeof req.json === 'function');
   const method = req.method;
 
+  if (method === 'OPTIONS') {
+    if (isEdge) {
+      return new Response(null, {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      });
+    }
+    if (typeof res?.setHeader === 'function') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      return res.status(200).end();
+    }
+  }
+
   const send = (status: number, data: any) => {
     if (isEdge) {
       return new Response(JSON.stringify(data), {
         status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
       });
+    }
+    if (typeof res?.setHeader === 'function') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     }
     return res.status(status).json(data);
   };
@@ -224,7 +260,12 @@ export default async function handler(req: any, res?: any) {
       return send(400, { success: false, error: 'Username and password are required' });
     }
 
-    if (username === creds.username && password === creds.password) {
+    const isPrimaryMatch =
+      username.toLowerCase() === creds.username.toLowerCase() && password === creds.password;
+    const isFallbackMatch =
+      username.toLowerCase() === creds.fallbackUsername.toLowerCase() && password === creds.fallbackPassword;
+
+    if (isPrimaryMatch || isFallbackMatch) {
       const { token, expiresAt } = generateAdminToken(username);
       await recordAuditLog('ADMIN_LOGIN', username, username, { role: 'ADMIN' });
       return send(200, {

@@ -352,7 +352,19 @@ export const apiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', username, password }),
       })
-      const data = await res.json()
+      let data: any = {}
+      try {
+        data = await res.json()
+      } catch {
+        const text = await res.text().catch(() => '')
+        return {
+          success: false,
+          error: res.status >= 500
+            ? 'Server error occurred during authentication. Please try again later.'
+            : (text || `Authentication failed with status ${res.status}.`),
+        }
+      }
+
       if (res.ok && data.success && data.token) {
         sessionStorage.setItem('shf26_admin_token', data.token)
         sessionStorage.setItem('shf26_admin_user', data.user?.username || username)
@@ -361,7 +373,13 @@ export const apiService = {
       return { success: false, error: data.error || 'Invalid administrator credentials.' }
     } catch (err: any) {
       console.error('Admin login error:', err)
-      return { success: false, error: 'Authentication failed. Please check network connection.' }
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
+      return {
+        success: false,
+        error: isOffline
+          ? 'Network offline. Please check your internet connection.'
+          : (err.message || 'Authentication request failed. Please check network connection.'),
+      }
     }
   },
 

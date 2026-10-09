@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Shield, Lock, User, ArrowRight, AlertCircle, Loader2, QrCode } from 'lucide-react'
+import { Shield, Lock, User, ArrowRight, AlertCircle, Loader2, ClipboardCheck } from 'lucide-react'
 import { attendanceService } from '../../services/attendanceApi'
 
 interface Props {
@@ -47,7 +47,7 @@ export default function AttendanceLogin({ onLoginSuccess }: Props) {
         {/* Header Icon */}
         <div className="flex flex-col items-center text-center mb-6">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-primary/20 to-brand-orange/20 border border-brand-primary/30 flex items-center justify-center mb-3 shadow-lg shadow-brand-primary/10">
-            <QrCode className="text-brand-primary w-8 h-8" />
+            <ClipboardCheck className="text-brand-primary w-8 h-8" />
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-primary/10 border border-brand-primary/20 text-brand-primary text-xs font-mono tracking-wider mb-2">
             <Shield size={12} />
@@ -119,7 +119,7 @@ export default function AttendanceLogin({ onLoginSuccess }: Props) {
               </>
             ) : (
               <>
-                <span>OPEN QR SCANNER</span>
+                <span>ACCESS ATTENDANCE DESK</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

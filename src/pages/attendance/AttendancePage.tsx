@@ -1,38 +1,47 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  QrCode,
-  LogOut,
   Users,
-  ShieldCheck,
+  ClipboardCheck,
+  UserCheck,
+  UserX,
+  LogOut,
   Loader2,
   AlertCircle,
   RefreshCw,
-  BarChart2,
+  BarChart3,
+  Layers,
 } from 'lucide-react'
 import {
   attendanceService,
   type AttendanceTeam,
   type AttendanceRecord,
   type AttendanceMember,
+  type AttendanceStats,
 } from '../../services/attendanceApi'
 import AttendanceLogin from './AttendanceLogin'
-import AttendanceScanner from './AttendanceScanner'
+import TeamSelector from './TeamSelector'
 import AttendanceForm from './AttendanceForm'
 
-type DeskState = 'SCANNING' | 'LOADING_TEAM' | 'MARKING' | 'ERROR'
+type DeskState = 'SELECTING' | 'LOADING_TEAM' | 'MARKING' | 'ERROR'
 
 export default function AttendancePage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return attendanceService.isAuthenticated()
   })
 
-  const [deskState, setDeskState] = useState<DeskState>('SCANNING')
+  const [deskState, setDeskState] = useState<DeskState>('SELECTING')
   const [currentTeam, setCurrentTeam] = useState<AttendanceTeam | null>(null)
   const [existingRecord, setExistingRecord] = useState<AttendanceRecord | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [totalMarkedCount, setTotalMarkedCount] = useState<number>(0)
   const [currentUser, setCurrentUser] = useState<string>(attendanceService.getUser())
+  const [stats, setStats] = useState<AttendanceStats>({
+    totalRegisteredTeams: 0,
+    teamsMarkedAttendance: 0,
+    studentsPresent: 0,
+    studentsAbsent: 0,
+  })
+  const [statsLoading, setStatsLoading] = useState<boolean>(false)
 
   // Add noindex tag to protect volunteer route from search engines
   useEffect(() => {
@@ -48,12 +57,14 @@ export default function AttendancePage() {
     }
   }, [])
 
-  // Fetch summary stats on load
+  // Fetch summary stats
   const loadStats = useCallback(async () => {
     if (!attendanceService.isAuthenticated()) return
+    setStatsLoading(true)
     const res = await attendanceService.getAllAttendance()
-    if (res.success) {
-      setTotalMarkedCount(res.records.length)
+    setStatsLoading(false)
+    if (res.success && res.stats) {
+      setStats(res.stats)
     }
   }, [])
 
@@ -66,7 +77,7 @@ export default function AttendancePage() {
   const handleLoginSuccess = () => {
     setIsAuthenticated(true)
     setCurrentUser(attendanceService.getUser())
-    setDeskState('SCANNING')
+    setDeskState('SELECTING')
     loadStats()
   }
 
@@ -75,11 +86,11 @@ export default function AttendancePage() {
     setIsAuthenticated(false)
     setCurrentTeam(null)
     setExistingRecord(null)
-    setDeskState('SCANNING')
+    setDeskState('SELECTING')
   }
 
-  // Handle Team Lookup from QR scan or manual search
-  const handleTeamLookup = async (teamCode: string, teamNameFallback?: string) => {
+  // Handle Team Lookup from dropdown selection
+  const handleTeamLookup = async (teamCode: string) => {
     setDeskState('LOADING_TEAM')
     setErrorMessage(null)
 
@@ -87,23 +98,12 @@ export default function AttendancePage() {
     const teamRes = await attendanceService.getTeam(teamCode)
 
     if (!teamRes.success || !teamRes.team) {
-      // If direct team lookup didn't find the team, but we have fallback name from QR:
-      if (teamNameFallback) {
-        // Construct team object with fallback name
-        const fallbackTeam: AttendanceTeam = {
-          teamCode,
-          teamName: teamNameFallback,
-          members: [{ name: 'Participant 1', college: 'Sree Sakthi Engineering College' }],
-        }
-        setCurrentTeam(fallbackTeam)
-      } else {
-        setErrorMessage(teamRes.error || `No registered team found with Code "${teamCode}".`)
-        setDeskState('ERROR')
-        return
-      }
-    } else {
-      setCurrentTeam(teamRes.team)
+      setErrorMessage(teamRes.error || `No registered team found with Code "${teamCode}".`)
+      setDeskState('ERROR')
+      return
     }
+
+    setCurrentTeam(teamRes.team)
 
     // 2. Check if attendance already recorded
     const attendRes = await attendanceService.checkAttendance(teamCode)
@@ -131,18 +131,19 @@ export default function AttendancePage() {
     })
 
     if (res.success) {
-      loadStats()
+      // Immediately refresh dashboard stats from database
+      await loadStats()
       return { success: true }
     } else {
       return { success: false, error: res.error || 'Failed to submit attendance.' }
     }
   }
 
-  const resetToScanner = () => {
+  const resetToSelector = () => {
     setCurrentTeam(null)
     setExistingRecord(null)
     setErrorMessage(null)
-    setDeskState('SCANNING')
+    setDeskState('SELECTING')
   }
 
   if (!isAuthenticated) {
@@ -158,7 +159,7 @@ export default function AttendancePage() {
       <header className="sticky top-0 z-30 bg-brand-surface/90 backdrop-blur-md border-b border-brand-border/60 px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-primary/20 to-brand-orange/20 border border-brand-primary/40 flex items-center justify-center text-brand-primary shadow-sm shadow-brand-primary/20">
-            <QrCode size={18} />
+            <ClipboardCheck size={18} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -175,13 +176,18 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* Right Stats & Logout */}
+        {/* Right Actions */}
         <div className="flex items-center gap-2.5">
-          <div className="hidden xs:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-bg border border-brand-border text-xs font-mono">
-            <BarChart2 size={13} className="text-brand-primary" />
-            <span className="text-brand-muted">Teams Marked:</span>
-            <span className="text-white font-bold">{totalMarkedCount}</span>
-          </div>
+          <button
+            type="button"
+            onClick={loadStats}
+            title="Refresh Attendance Statistics"
+            disabled={statsLoading}
+            className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-brand-bg hover:bg-zinc-800 active:scale-95 text-zinc-300 hover:text-white border border-brand-border text-xs font-mono flex items-center gap-1.5 transition-all disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={statsLoading ? 'animate-spin text-brand-primary' : ''} />
+            <span className="hidden sm:inline">Refresh Stats</span>
+          </button>
 
           <button
             type="button"
@@ -195,85 +201,154 @@ export default function AttendancePage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 flex items-center justify-center relative z-10">
-        <AnimatePresence mode="wait">
-          {deskState === 'SCANNING' && (
-            <motion.div
-              key="scanner"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="w-full"
-            >
-              <AttendanceScanner
-                onScan={(code, name) => handleTeamLookup(code, name)}
-                onManualLookup={code => handleTeamLookup(code)}
-              />
-            </motion.div>
-          )}
-
-          {deskState === 'LOADING_TEAM' && (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="p-12 text-center flex flex-col items-center"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-brand-primary/10 border border-brand-primary/30 flex items-center justify-center text-brand-primary mb-4 shadow-lg shadow-brand-primary/10">
-                <Loader2 size={32} className="animate-spin" />
+      {/* Main Container */}
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col items-center relative z-10 max-w-5xl mx-auto w-full">
+        {/* Part 3: Dashboard Statistics Cards */}
+        <section className="w-full mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {/* 1. Total Registered Teams */}
+            <div className="p-4 rounded-2xl bg-brand-surface/90 border border-brand-border/70 shadow-lg relative overflow-hidden group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-mono text-brand-muted uppercase tracking-wider">
+                  Total Teams
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                  <Layers size={15} />
+                </div>
               </div>
-              <h3 className="font-display font-bold text-lg text-white">Retrieving Team Details</h3>
-              <p className="text-xs text-brand-muted font-mono mt-1">
-                Querying official Sakthi HackFest registration records...
-              </p>
-            </motion.div>
-          )}
-
-          {deskState === 'MARKING' && currentTeam && (
-            <motion.div
-              key="marking"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="w-full"
-            >
-              <AttendanceForm
-                team={currentTeam}
-                existingRecord={existingRecord}
-                onSubmit={handleSubmitAttendance}
-                onCancel={resetToScanner}
-                onScanNext={resetToScanner}
-              />
-            </motion.div>
-          )}
-
-          {deskState === 'ERROR' && (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="w-full max-w-md mx-auto bg-brand-surface border border-red-500/40 rounded-3xl p-6 text-center shadow-2xl"
-            >
-              <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto mb-4">
-                <AlertCircle size={32} />
+              <div className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight">
+                {stats.totalRegisteredTeams}
               </div>
-              <h3 className="font-display font-bold text-lg text-white">Team Lookup Failed</h3>
-              <p className="text-xs sm:text-sm text-zinc-300 mt-2 font-sans">{errorMessage}</p>
+              <p className="text-[11px] font-mono text-zinc-500 mt-1">Total Registered</p>
+            </div>
 
-              <button
-                type="button"
-                onClick={resetToScanner}
-                className="mt-6 w-full py-3 px-4 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20"
+            {/* 2. Teams Marked Attendance */}
+            <div className="p-4 rounded-2xl bg-brand-surface/90 border border-brand-border/70 shadow-lg relative overflow-hidden group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-mono text-brand-muted uppercase tracking-wider">
+                  Teams Marked
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center text-brand-primary">
+                  <ClipboardCheck size={15} />
+                </div>
+              </div>
+              <div className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight">
+                {stats.teamsMarkedAttendance}
+              </div>
+              <p className="text-[11px] font-mono text-zinc-500 mt-1">Attendance Saved</p>
+            </div>
+
+            {/* 3. Students Present */}
+            <div className="p-4 rounded-2xl bg-brand-surface/90 border border-brand-border/70 shadow-lg relative overflow-hidden group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-mono text-brand-muted uppercase tracking-wider">
+                  Students Present
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <UserCheck size={15} />
+                </div>
+              </div>
+              <div className="text-2xl sm:text-3xl font-display font-black text-emerald-400 tracking-tight">
+                {stats.studentsPresent}
+              </div>
+              <p className="text-[11px] font-mono text-zinc-500 mt-1">Verified Present</p>
+            </div>
+
+            {/* 4. Students Absent */}
+            <div className="p-4 rounded-2xl bg-brand-surface/90 border border-brand-border/70 shadow-lg relative overflow-hidden group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-mono text-brand-muted uppercase tracking-wider">
+                  Students Absent
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                  <UserX size={15} />
+                </div>
+              </div>
+              <div className="text-2xl sm:text-3xl font-display font-black text-rose-400 tracking-tight">
+                {stats.studentsAbsent}
+              </div>
+              <p className="text-[11px] font-mono text-zinc-500 mt-1">Marked Absent</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Dynamic Workflow Area */}
+        <div className="w-full flex-1 flex items-center justify-center">
+          <AnimatePresence mode="wait">
+            {deskState === 'SELECTING' && (
+              <motion.div
+                key="selecting"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="w-full"
               >
-                <RefreshCw size={14} />
-                <span>Return to QR Scanner</span>
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                <TeamSelector onSelectTeam={code => handleTeamLookup(code)} />
+              </motion.div>
+            )}
+
+            {deskState === 'LOADING_TEAM' && (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="p-12 text-center flex flex-col items-center"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-brand-primary/10 border border-brand-primary/30 flex items-center justify-center text-brand-primary mb-4 shadow-lg shadow-brand-primary/10">
+                  <Loader2 size={32} className="animate-spin" />
+                </div>
+                <h3 className="font-display font-bold text-lg text-white">Retrieving Team Details</h3>
+                <p className="text-xs text-brand-muted font-mono mt-1">
+                  Querying official Sakthi HackFest registration records...
+                </p>
+              </motion.div>
+            )}
+
+            {deskState === 'MARKING' && currentTeam && (
+              <motion.div
+                key="marking"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="w-full"
+              >
+                <AttendanceForm
+                  team={currentTeam}
+                  existingRecord={existingRecord}
+                  onSubmit={handleSubmitAttendance}
+                  onCancel={resetToSelector}
+                  onScanNext={resetToSelector}
+                />
+              </motion.div>
+            )}
+
+            {deskState === 'ERROR' && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full max-w-md mx-auto bg-brand-surface border border-red-500/40 rounded-3xl p-6 text-center shadow-2xl"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto mb-4">
+                  <AlertCircle size={32} />
+                </div>
+                <h3 className="font-display font-bold text-lg text-white">Team Lookup Failed</h3>
+                <p className="text-xs sm:text-sm text-zinc-300 mt-2 font-sans">{errorMessage}</p>
+
+                <button
+                  type="button"
+                  onClick={resetToSelector}
+                  className="mt-6 w-full py-3 px-4 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20"
+                >
+                  <RefreshCw size={14} />
+                  <span>Return to Team Selection</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </main>
     </div>
   )

@@ -85,7 +85,16 @@ export default defineConfig(({ mode }) => {
                     body: body,
                   }
 
-                  await handler(nodeReq, nodeRes)
+                  const result = await handler(nodeReq, nodeRes)
+                  if (result && typeof result === 'object' && 'status' in result && typeof (result as any).text === 'function') {
+                    const webRes = result as Response
+                    res.statusCode = webRes.status
+                    webRes.headers.forEach((val: string, key: string) => {
+                      res.setHeader(key, val)
+                    })
+                    const text = await webRes.text()
+                    res.end(text)
+                  }
                 } catch (err: any) {
                   const ep = isRegister ? '/api/register' : '/api/admin'
                   console.error(`[Local Dev ${ep} error]:`, err)
