@@ -157,6 +157,8 @@ export default function LiveTimer() {
                   ? 'bg-yellow-400'
                   : timerState.status === 'ENDED'
                   ? 'bg-red-500 animate-pulse'
+                  : timerState.status === 'STOPPED'
+                  ? 'bg-amber-400'
                   : 'bg-brand-muted'
               }`}
             />
@@ -167,6 +169,8 @@ export default function LiveTimer() {
                 ? 'TIMER PAUSED'
                 : timerState.status === 'ENDED'
                 ? 'TIME EXPIRED · CODE FREEZE'
+                : timerState.status === 'STOPPED'
+                ? (timerState.remainingSeconds === (timerState.configuredDurationSeconds || 86400) ? 'STAGE READY' : 'TIMER STOPPED')
                 : 'STAGE READY'}
             </span>
           </div>
@@ -201,7 +205,7 @@ export default function LiveTimer() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-primary/40 bg-brand-primary/10 text-brand-primary font-mono text-xs sm:text-sm tracking-[0.25em] font-bold uppercase shadow-glow-red">
             <Radio size={14} className="animate-pulse" />
-            24-HOUR SPRINT CLOCK
+            {Math.round((timerState.configuredDurationSeconds || 86400) / 3600)}-HOUR SPRINT CLOCK
           </div>
         </motion.div>
 
@@ -291,11 +295,35 @@ export default function LiveTimer() {
                 PENS DOWN · CODE FREEZE
               </div>
               <p className="font-mono text-xs sm:text-sm text-red-200">
-                The 24-hour hacking duration has concluded. No more commits or code changes allowed.
+                The {Math.round((timerState.configuredDurationSeconds || 86400) / 3600)}-hour hacking duration has concluded. No more commits or code changes allowed.
               </p>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ── MOTIVATIONAL SECTION: QUOTE & TAMIL THIRUKKURAL ────────────── */}
+        <div className="w-full max-w-2xl mx-auto mt-8 sm:mt-10 px-4">
+          <div className="relative rounded-2xl bg-[#0D0D12]/75 border border-brand-border/60 backdrop-blur-md px-6 py-4 sm:px-8 sm:py-5 shadow-2xl text-center space-y-2.5">
+            {/* Motivational Quote */}
+            <p className="font-mono text-xs sm:text-sm md:text-[15px] text-brand-orange font-semibold tracking-wide">
+              "Success begins where determination refuses to give up."
+            </p>
+
+            {/* Tamil Thirukkural */}
+            <div
+              className="text-sm sm:text-base md:text-lg text-white/95 font-medium leading-relaxed tracking-normal"
+              style={{ fontFamily: "'Noto Sans Tamil', 'Mukta Malar', 'Latha', system-ui, sans-serif" }}
+            >
+              <div>தெய்வத்தான் ஆகா தெனினும் முயற்சிதன்</div>
+              <div>மெய்வருத்தக் கூலி தரும்.</div>
+            </div>
+
+            {/* Subtle Attribution */}
+            <div className="text-[10px] sm:text-xs font-mono text-brand-muted tracking-widest uppercase">
+              — திருக்குறள் (குறள் 619)
+            </div>
+          </div>
+        </div>
       </main>
 
       {/* ── STAGE TICKER / ANNOUNCEMENT BANNER ────────────────────────────── */}

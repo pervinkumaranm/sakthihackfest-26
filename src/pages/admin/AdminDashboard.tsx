@@ -161,18 +161,43 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // ── LIVE STAGE TIMER CONTROLLER STATE ────────────────────────────────────
   const [timerState, setTimerState] = useState<HackathonTimerState>(() => timerService.getState())
-  const [timerPresetHours, setTimerPresetHours] = useState<number>(24)
-  const [timerCustomMins, setTimerCustomMins] = useState<number>(0)
+  const [timerPresetHours, setTimerPresetHours] = useState<number>(() => {
+    const s = timerService.getState()
+    return Math.floor((s.configuredDurationSeconds || 86400) / 3600)
+  })
+  const [timerCustomMins, setTimerCustomMins] = useState<number>(() => {
+    const s = timerService.getState()
+    return Math.floor(((s.configuredDurationSeconds || 86400) % 3600) / 60)
+  })
   const [announcementInput, setAnnouncementInput] = useState<string>('')
   const [confirmEndOpen, setConfirmEndOpen] = useState(false)
 
-  // Subscribe to real-time timer sync
+  // Subscribe to real-time timer sync and poll server every 2.5s for cross-device sync
   useEffect(() => {
     const unsub = timerService.subscribe((state) => {
       setTimerState(state)
     })
-    return unsub
+
+    timerService.fetchServerState().catch(() => {})
+    const pollInterval = setInterval(() => {
+      timerService.fetchServerState().catch(() => {})
+    }, 2500)
+
+    return () => {
+      unsub()
+      clearInterval(pollInterval)
+    }
   }, [])
+
+  // Synchronize configured duration into inputs when updated from database
+  useEffect(() => {
+    if (timerState.configuredDurationSeconds) {
+      const hrs = Math.floor(timerState.configuredDurationSeconds / 3600)
+      const mins = Math.floor((timerState.configuredDurationSeconds % 3600) / 60)
+      setTimerPresetHours(hrs)
+      setTimerCustomMins(mins)
+    }
+  }, [timerState.configuredDurationSeconds])
 
   // Live timer tick for accurate UI display
   const [timerDisplay, setTimerDisplay] = useState({
@@ -197,13 +222,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       } else if (state.status === 'ENDED') {
         remSec = 0
       } else {
-        remSec = Math.max(0, Math.round(state.totalDurationSeconds))
+        remSec = Math.max(0, Math.round(state.remainingSeconds || state.configuredDurationSeconds || 86400))
       }
 
       const hours = Math.floor(remSec / 3600)
       const minutes = Math.floor((remSec % 3600) / 60)
       const seconds = remSec % 60
-      const totalDur = state.totalDurationSeconds || 1
+      const totalDur = state.configuredDurationSeconds || state.totalDurationSeconds || 86400
       const percent = Math.min(100, Math.max(0, (remSec / totalDur) * 100))
 
       setTimerDisplay({ hours, minutes, seconds, totalSeconds: remSec, percent })
@@ -212,57 +237,116 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     update()
     const interval = setInterval(update, 1000)
     return () => clearInterval(interval)
-  }, [timerState.status, timerState.targetEndTime, timerState.remainingSeconds])
+  }, [timerState.status, timerState.targetEndTime, timerState.remainingSeconds, timerState.configuredDurationSeconds])
 
   // Timer Controller Actions
-  const handleStartTimer = (hours?: number, mins?: number) => {
-    const totalSec = ((hours ?? timerPresetHours) * 3600) + ((mins ?? timerCustomMins) * 60)
-    if (timerState.status === 'PAUSED') {
-      timerService.resumeTimer()
-      setActionFeedback({ type: 'success', message: 'Stage timer resumed.' })
+  const handleConfigureDuration = async (hours = timerPresetHours, mins = timerCustomMins) => {
+    const totalSec = (hours * 3600) + (mins * 60)
+    if (totalSec <= 0) {
+      setActionFeedback({ type: 'error', message: 'Duration must be greater than 0.' })
+      return
+    }
+    const res = await timerService.configureDuration(totalSec)
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: `Configured duration saved: ${hours}h ${mins ? mins + 'm' : ''}.` })
     } else {
-      timerService.startTimer(totalSec)
-      setActionFeedback({ type: 'success', message: `Stage timer started for ${Math.round(totalSec / 3600)} hours.` })
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to save configured duration.' })
     }
   }
 
-  const handlePauseTimer = () => {
-    timerService.pauseTimer()
-    setActionFeedback({ type: 'success', message: 'Stage timer paused across all screens.' })
+  const handleStartTimer = async (hours?: number, mins?: number) => {
+    const totalSec = ((hours ?? timerPresetHours) * 3600) + ((mins ?? timerCustomMins) * 60)
+    if (timerState.status === 'PAUSED') {
+      const res = await timerService.resumeTimer()
+      if (res.success) {
+        setActionFeedback({ type: 'success', message: 'Stage timer resumed.' })
+      } else {
+        setActionFeedback({ type: 'error', message: res.error || 'Failed to resume timer.' })
+      }
+    } else {
+      const res = await timerService.startTimer(totalSec)
+      if (res.success) {
+        setActionFeedback({ type: 'success', message: `Stage timer started for ${Math.round(totalSec / 3600)} hours.` })
+      } else {
+        setActionFeedback({ type: 'error', message: res.error || 'Failed to start timer.' })
+      }
+    }
   }
 
-  const handleResumeTimer = () => {
-    timerService.resumeTimer()
-    setActionFeedback({ type: 'success', message: 'Stage timer resumed.' })
+  const handleStopTimer = async () => {
+    const res = await timerService.stopTimer()
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'Stage timer stopped and saved across all devices.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to stop timer.' })
+    }
   }
 
-  const handleConfirmEndTimer = () => {
-    timerService.endTimer()
+  const handlePauseTimer = async () => {
+    const res = await timerService.pauseTimer()
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'Stage timer paused across all screens.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to pause timer.' })
+    }
+  }
+
+  const handleResumeTimer = async () => {
+    const res = await timerService.resumeTimer()
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'Stage timer resumed.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to resume timer.' })
+    }
+  }
+
+  const handleConfirmEndTimer = async () => {
+    const res = await timerService.endTimer()
     setConfirmEndOpen(false)
-    setActionFeedback({ type: 'success', message: 'CODE FREEZE triggered! Stage timer ended.' })
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'CODE FREEZE triggered! Stage timer ended.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to trigger code freeze.' })
+    }
   }
 
-  const handleResetTimer = (hours = timerPresetHours) => {
+  const handleResetTimer = async (hours = timerPresetHours) => {
     const totalSec = (hours * 3600) + (timerCustomMins * 60)
-    timerService.resetTimer(totalSec)
-    setActionFeedback({ type: 'success', message: 'Stage timer reset to ready state.' })
+    const res = await timerService.resetTimer(totalSec)
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'Stage timer reset to ready state.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to reset timer.' })
+    }
   }
 
-  const handleAdjustTimer = (deltaSec: number, label: string) => {
-    timerService.adjustTime(deltaSec)
-    setActionFeedback({ type: 'success', message: `Timer adjusted: ${label}.` })
+  const handleAdjustTimer = async (deltaSec: number, label: string) => {
+    const res = await timerService.adjustTime(deltaSec)
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: `Timer adjusted: ${label}.` })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to adjust timer.' })
+    }
   }
 
-  const handleBroadcastAnnouncement = () => {
+  const handleBroadcastAnnouncement = async () => {
     if (!announcementInput.trim()) return
-    timerService.setAnnouncement(announcementInput.trim())
-    setActionFeedback({ type: 'success', message: 'Stage announcement broadcasted to all projector screens.' })
+    const res = await timerService.setAnnouncement(announcementInput.trim())
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'Stage announcement broadcasted to all projector screens.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to broadcast announcement.' })
+    }
   }
 
-  const handleClearAnnouncement = () => {
-    timerService.setAnnouncement('')
+  const handleClearAnnouncement = async () => {
+    const res = await timerService.setAnnouncement('')
     setAnnouncementInput('')
-    setActionFeedback({ type: 'success', message: 'Stage announcement cleared.' })
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: 'Stage announcement cleared.' })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to clear announcement.' })
+    }
   }
 
   // ── WINNER ANNOUNCEMENT CONTROLLER STATE ─────────────────────────────────
@@ -2055,8 +2139,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </div>
               </div>
 
-              {/* Primary Large Controls (Start / Pause / End / Reset) */}
-              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-2 border-t border-brand-border/60">
+              {/* Primary Large Controls (Start / Pause / Stop / Reset / End) */}
+              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 pt-2 border-t border-brand-border/60">
                 {/* 1. START / RESUME */}
                 {timerState.status === 'RUNNING' ? (
                   <button
@@ -2094,14 +2178,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   <span>PAUSE TIMER</span>
                 </button>
 
-                {/* 3. END / CODE FREEZE */}
+                {/* 3. STOP */}
                 <button
-                  onClick={() => setConfirmEndOpen(true)}
-                  disabled={timerState.status === 'ENDED'}
-                  className="py-4 px-3 rounded-2xl bg-red-600/90 hover:bg-red-500 text-white font-mono font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-glow-red transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
+                  onClick={handleStopTimer}
+                  disabled={timerState.status === 'STOPPED' || (timerState.status as string) === 'IDLE'}
+                  className="py-4 px-3 rounded-2xl bg-rose-700/90 hover:bg-rose-600 text-white font-mono font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-lg shadow-rose-950/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
                 >
                   <Square size={20} className="fill-current" />
-                  <span>END / FREEZE</span>
+                  <span>STOP TIMER</span>
                 </button>
 
                 {/* 4. RESET */}
@@ -2111,6 +2195,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 >
                   <RotateCcw size={20} />
                   <span>RESET TIMER</span>
+                </button>
+
+                {/* 5. END / FREEZE */}
+                <button
+                  onClick={() => setConfirmEndOpen(true)}
+                  disabled={timerState.status === 'ENDED'}
+                  className="py-4 px-3 rounded-2xl bg-red-950/60 border border-red-600/50 hover:bg-red-900/80 text-red-300 font-mono font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-glow-red transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
+                >
+                  <AlertCircle size={20} />
+                  <span>CODE FREEZE</span>
                 </button>
               </div>
 
@@ -2182,7 +2276,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       key={p.label}
                       onClick={() => {
                         setTimerPresetHours(p.hours)
-                        handleResetTimer(p.hours)
+                        setTimerCustomMins(0)
+                        handleConfigureDuration(p.hours, 0)
                       }}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         timerPresetHours === p.hours
@@ -2222,10 +2317,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       />
                     </div>
                     <button
-                      onClick={() => handleResetTimer(timerPresetHours)}
-                      className="mt-4 px-4 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primaryLight text-white font-mono text-xs font-bold transition-all"
+                      onClick={() => handleConfigureDuration(timerPresetHours, timerCustomMins)}
+                      className="mt-4 px-4 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primaryLight text-white font-mono text-xs font-bold transition-all shadow-glow-red"
                     >
-                      APPLY
+                      SAVE DURATION
                     </button>
                   </div>
                 </div>

@@ -22,7 +22,8 @@ COMMENT ON TABLE public.app_settings IS 'Single source of truth for runtime appl
 INSERT INTO public.app_settings (key, value, updated_at, updated_by)
 VALUES 
   ('registration_open', 'false'::jsonb, timezone('utc'::text, now()), 'system'),
-  ('accommodation_open', 'false'::jsonb, timezone('utc'::text, now()), 'system')
+  ('accommodation_open', 'false'::jsonb, timezone('utc'::text, now()), 'system'),
+  ('hackathon_timer', '{"status":"STOPPED","configuredDurationSeconds":86400,"totalDurationSeconds":86400,"remainingSeconds":86400,"targetEndTime":null,"startedAt":null,"pausedAt":null,"stoppedAt":null,"announcement":"WELCOME TO SAKTHI HACKFEST 2K26 · BUILD. BREAK. INNOVATE.","version":1}'::jsonb, timezone('utc'::text, now()), 'system')
 ON CONFLICT (key) DO NOTHING;
 
 -- ----------------------------------------------------------------------------

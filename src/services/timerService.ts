@@ -2,36 +2,50 @@
  * SAKTHI HACKFEST '26 - Live Synchronized Hackathon Stage Timer Service
  *
  * Synchronizes timer state between Admin Control Center and Public Stage Screen (/timer, /live-timer)
+ * Single Source of Truth: /api/timer (Supabase app_settings)
  * Uses BroadcastChannel + LocalStorage for 0ms instant tab synchronization,
- * with server API fallback (/api/timer) for multi-device network synchronization.
+ * with periodic server API polling for robust multi-device network synchronization.
  */
 
-export type TimerStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'ENDED'
+import { apiService } from './api'
+
+export type TimerStatus = 'STOPPED' | 'RUNNING' | 'PAUSED' | 'ENDED' | 'IDLE'
 
 export interface HackathonTimerState {
   status: TimerStatus
-  totalDurationSeconds: number // e.g. 24 * 3600 = 86400
+  configuredDurationSeconds: number // e.g. 24 * 3600 = 86400
+  totalDurationSeconds: number // for backwards compatibility
   remainingSeconds: number
-  targetEndTime?: number // Timestamp when current countdown will reach 0
-  startedAt?: number
-  pausedAt?: number
+  targetEndTime?: number | null // Timestamp ms when current countdown will reach 0
+  startedAt?: number | null
+  pausedAt?: number | null
+  stoppedAt?: number | null
   announcement?: string
+  version?: number
   lastUpdated: number
+  updatedBy?: string
 }
 
-const STORAGE_KEY = 'shf26_live_timer_state_v1'
-const BROADCAST_CHANNEL_NAME = 'shf26_timer_broadcast'
+const STORAGE_KEY = 'shf26_live_timer_state_v2'
+const BROADCAST_CHANNEL_NAME = 'shf26_timer_broadcast_v2'
 
 const DEFAULT_DURATION_SECONDS = 24 * 60 * 60 // 24 Hours default
 
 function getDefaultState(): HackathonTimerState {
   return {
-    status: 'IDLE',
+    status: 'STOPPED',
+    configuredDurationSeconds: DEFAULT_DURATION_SECONDS,
     totalDurationSeconds: DEFAULT_DURATION_SECONDS,
     remainingSeconds: DEFAULT_DURATION_SECONDS,
+    targetEndTime: null,
+    startedAt: null,
+    pausedAt: null,
+    stoppedAt: null,
     announcement: 'WELCOME TO SAKTHI HACKFEST 2K26 · BUILD. BREAK. INNOVATE.',
+    version: 1,
     lastUpdated: Date.now(),
-  }
+    updatedBy: 'system',
+  };
 }
 
 class TimerService {
@@ -48,8 +62,7 @@ class TimerService {
         this.channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME)
         this.channel.onmessage = (event) => {
           if (event.data && typeof event.data === 'object') {
-            this.currentState = event.data
-            this.notifySubscribers()
+            this.adoptState(event.data)
           }
         }
       } catch {
@@ -57,18 +70,23 @@ class TimerService {
       }
     }
 
-    // Also listen to standard window storage events
+    // Listen to standard window storage events
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
         if (e.key === STORAGE_KEY && e.newValue) {
           try {
-            this.currentState = JSON.parse(e.newValue)
-            this.notifySubscribers()
+            const parsed = JSON.parse(e.newValue)
+            this.adoptState(parsed)
           } catch {
             // ignore
           }
         }
       })
+    }
+
+    // Immediately trigger server sync
+    if (typeof window !== 'undefined') {
+      this.fetchServerState().catch(() => {})
     }
   }
 
@@ -78,14 +96,15 @@ class TimerService {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const parsed: HackathonTimerState = JSON.parse(raw)
-        // If it was running, calculate actual remaining seconds based on targetEndTime
-        if (parsed.status === 'RUNNING' && parsed.targetEndTime) {
-          const now = Date.now()
-          const diff = Math.max(0, Math.round((parsed.targetEndTime - now) / 1000))
-          parsed.remainingSeconds = diff
-          if (diff <= 0) {
-            parsed.status = 'ENDED'
-          }
+        // Normalize status
+        if (parsed.status as string === 'IDLE') {
+          parsed.status = 'STOPPED'
+        }
+        if (!parsed.configuredDurationSeconds) {
+          parsed.configuredDurationSeconds = parsed.totalDurationSeconds || DEFAULT_DURATION_SECONDS
+        }
+        if (!parsed.totalDurationSeconds) {
+          parsed.totalDurationSeconds = parsed.configuredDurationSeconds
         }
         return parsed
       }
@@ -95,72 +114,33 @@ class TimerService {
     return getDefaultState()
   }
 
-  private saveState(state: HackathonTimerState) {
-    this.currentState = { ...state, lastUpdated: Date.now() }
+  private adoptState(incoming: HackathonTimerState) {
+    if (!incoming) return
+
+    // Normalize
+    const normalized: HackathonTimerState = {
+      ...incoming,
+      status: incoming.status as string === 'IDLE' ? 'STOPPED' : incoming.status,
+      configuredDurationSeconds: incoming.configuredDurationSeconds || incoming.totalDurationSeconds || DEFAULT_DURATION_SECONDS,
+      totalDurationSeconds: incoming.totalDurationSeconds || incoming.configuredDurationSeconds || DEFAULT_DURATION_SECONDS,
+    }
+
+    this.currentState = normalized
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentState))
     } catch {
       // ignore
     }
-
-    // Broadcast to other tabs immediately
-    if (this.channel) {
-      try {
-        this.channel.postMessage(this.currentState)
-      } catch {
-        // ignore
-      }
-    }
-
-    // Sync to backend API for multi-device network sync
-    this.syncToServer(this.currentState)
-
     this.notifySubscribers()
   }
 
-  private async syncToServer(state: HackathonTimerState) {
-    try {
-      await fetch('/api/timer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set_state', state }),
-      })
-    } catch {
-      // Serverless edge fallback or offline mode
-    }
-  }
-
-  public async fetchServerState(): Promise<HackathonTimerState | null> {
-    try {
-      const res = await fetch('/api/timer', { cache: 'no-store' })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success && data.state) {
-          // If server state is newer, adopt it
-          if (!this.currentState || (data.state.lastUpdated && data.state.lastUpdated > this.currentState.lastUpdated)) {
-            this.currentState = data.state
-            try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentState))
-            } catch {
-              // ignore
-            }
-            this.notifySubscribers()
-          }
-          return data.state
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return null
-  }
-
   private notifySubscribers() {
-    this.subscribers.forEach((cb) => cb(this.currentState))
+    const live = this.getState()
+    this.subscribers.forEach((cb) => cb(live))
   }
 
   public getState(): HackathonTimerState {
-    // Dynamically compute live remaining seconds if RUNNING
+    // Dynamically compute live remaining seconds if RUNNING based on authoritative targetEndTime
     if (this.currentState.status === 'RUNNING' && this.currentState.targetEndTime) {
       const now = Date.now()
       const diff = Math.max(0, Math.round((this.currentState.targetEndTime - now) / 1000))
@@ -181,100 +161,150 @@ class TimerService {
     }
   }
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  // ── Network Fetch from Authoritative API ─────────────────────────────────
 
-  public startTimer(durationSeconds?: number, announcement?: string) {
-    const total = durationSeconds ?? this.currentState.totalDurationSeconds
-    const targetEndTime = Date.now() + total * 1000
-
-    this.saveState({
-      ...this.currentState,
-      status: 'RUNNING',
-      totalDurationSeconds: total,
-      remainingSeconds: total,
-      targetEndTime,
-      startedAt: Date.now(),
-      announcement: announcement !== undefined ? announcement : this.currentState.announcement,
-    })
-  }
-
-  public resumeTimer() {
-    const remaining = this.currentState.remainingSeconds || this.currentState.totalDurationSeconds
-    const targetEndTime = Date.now() + remaining * 1000
-
-    this.saveState({
-      ...this.currentState,
-      status: 'RUNNING',
-      remainingSeconds: remaining,
-      targetEndTime,
-      startedAt: this.currentState.startedAt || Date.now(),
-    })
-  }
-
-  public pauseTimer() {
-    // Freeze current remaining
-    let remaining = this.currentState.remainingSeconds
-    if (this.currentState.targetEndTime) {
-      remaining = Math.max(0, Math.round((this.currentState.targetEndTime - Date.now()) / 1000))
-    }
-
-    this.saveState({
-      ...this.currentState,
-      status: 'PAUSED',
-      remainingSeconds: remaining,
-      targetEndTime: undefined,
-      pausedAt: Date.now(),
-    })
-  }
-
-  public endTimer() {
-    this.saveState({
-      ...this.currentState,
-      status: 'ENDED',
-      remainingSeconds: 0,
-      targetEndTime: undefined,
-    })
-  }
-
-  public resetTimer(durationSeconds?: number) {
-    const total = durationSeconds ?? this.currentState.totalDurationSeconds
-    this.saveState({
-      ...this.currentState,
-      status: 'IDLE',
-      totalDurationSeconds: total,
-      remainingSeconds: total,
-      targetEndTime: undefined,
-      startedAt: undefined,
-      pausedAt: undefined,
-    })
-  }
-
-  public setAnnouncement(announcement: string) {
-    this.saveState({
-      ...this.currentState,
-      announcement,
-    })
-  }
-
-  public adjustTime(deltaSeconds: number) {
-    if (this.currentState.status === 'RUNNING' && this.currentState.targetEndTime) {
-      const newTarget = this.currentState.targetEndTime + deltaSeconds * 1000
-      const now = Date.now()
-      const newRemaining = Math.max(0, Math.round((newTarget - now) / 1000))
-      this.saveState({
-        ...this.currentState,
-        targetEndTime: newTarget,
-        remainingSeconds: newRemaining,
-        totalDurationSeconds: Math.max(this.currentState.totalDurationSeconds + deltaSeconds, newRemaining),
+  public async fetchServerState(): Promise<HackathonTimerState | null> {
+    try {
+      const res = await fetch('/api/timer', {
+        headers: { 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
       })
-    } else {
-      const newRemaining = Math.max(0, this.currentState.remainingSeconds + deltaSeconds)
-      this.saveState({
-        ...this.currentState,
-        remainingSeconds: newRemaining,
-        totalDurationSeconds: Math.max(this.currentState.totalDurationSeconds + deltaSeconds, newRemaining),
-      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.state) {
+          const serverState: HackathonTimerState = data.state
+
+          // Check if server state has updates
+          const isDifferent =
+            !this.currentState ||
+            serverState.version !== this.currentState.version ||
+            serverState.status !== this.currentState.status ||
+            serverState.targetEndTime !== this.currentState.targetEndTime ||
+            serverState.configuredDurationSeconds !== this.currentState.configuredDurationSeconds ||
+            serverState.announcement !== this.currentState.announcement ||
+            (serverState.status !== 'RUNNING' && Math.abs(serverState.remainingSeconds - this.currentState.remainingSeconds) > 1)
+
+          if (isDifferent) {
+            this.adoptState(serverState)
+          }
+          return this.getState()
+        }
+      }
+    } catch (err) {
+      console.warn('[TimerService] Server fetch failed:', err)
     }
+    return null
+  }
+
+  // ── Mutating API Dispatcher (Requires Admin Auth) ─────────────────────────
+
+  private async dispatchAction(
+    action: string,
+    payload: Record<string, any> = {}
+  ): Promise<{ success: boolean; state?: HackathonTimerState; error?: string }> {
+    const token = apiService.getAdminToken()
+
+    try {
+      const res = await fetch('/api/timer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ action, ...payload }),
+      })
+
+      const data = await res.json()
+      if (res.ok && data.success && data.state) {
+        this.adoptState(data.state)
+
+        // Broadcast to other tabs on this origin
+        if (this.channel) {
+          try {
+            this.channel.postMessage(this.currentState)
+          } catch {
+            // ignore
+          }
+        }
+
+        return { success: true, state: this.currentState }
+      }
+
+      const errorMsg = data.error || `Failed to execute timer action '${action}' (HTTP ${res.status}).`
+      console.error(`[TimerService] Action '${action}' failed:`, errorMsg)
+      return { success: false, error: errorMsg }
+    } catch (err: any) {
+      const errorMsg = err.message || 'Network error occurred while updating stage timer.'
+      console.error(`[TimerService] Network error during action '${action}':`, err)
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  // ── High-Level Actions ───────────────────────────────────────────────────
+
+  /**
+   * Configure authoritative timer duration without starting the countdown.
+   * Persists configured duration in the database.
+   */
+  public async configureDuration(durationSeconds: number) {
+    return this.dispatchAction('configure', { durationSeconds })
+  }
+
+  /**
+   * Explicitly starts the timer for the configured duration.
+   */
+  public async startTimer(durationSeconds?: number, announcement?: string) {
+    return this.dispatchAction('start', { durationSeconds, announcement })
+  }
+
+  /**
+   * Explicitly stops the timer and persists STOPPED status with current remaining time.
+   */
+  public async stopTimer() {
+    return this.dispatchAction('stop')
+  }
+
+  /**
+   * Temporarily pauses the timer.
+   */
+  public async pauseTimer() {
+    return this.dispatchAction('pause')
+  }
+
+  /**
+   * Resumes countdown from paused or stopped state.
+   */
+  public async resumeTimer() {
+    return this.dispatchAction('resume')
+  }
+
+  /**
+   * Resets timer back to full configured duration in ready/stopped state.
+   */
+  public async resetTimer(durationSeconds?: number) {
+    return this.dispatchAction('reset', { durationSeconds })
+  }
+
+  /**
+   * Triggers Code Freeze / Hackathon End.
+   */
+  public async endTimer() {
+    return this.dispatchAction('end')
+  }
+
+  /**
+   * Emergency time extension or deduction (+/- seconds).
+   */
+  public async adjustTime(deltaSeconds: number) {
+    return this.dispatchAction('adjust_time', { deltaSeconds })
+  }
+
+  /**
+   * Broadcasts ticker message to all projector screens.
+   */
+  public async setAnnouncement(announcement: string) {
+    return this.dispatchAction('set_announcement', { announcement })
   }
 }
 
