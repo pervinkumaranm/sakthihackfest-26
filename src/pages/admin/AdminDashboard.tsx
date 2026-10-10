@@ -94,7 +94,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           return parsed
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     return {
       registrationOpen: true,
       accommodationOpen: true,
@@ -179,9 +179,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       setTimerState(state)
     })
 
-    timerService.fetchServerState().catch(() => {})
+    timerService.fetchServerState().catch(() => { })
     const pollInterval = setInterval(() => {
-      timerService.fetchServerState().catch(() => {})
+      timerService.fetchServerState().catch(() => { })
     }, 2500)
 
     return () => {
@@ -580,7 +580,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         }
         setFormSettings(newSettings)
         setLocalSettings(newSettings)
-        refreshSettings().catch(() => {})
+        refreshSettings().catch(() => { })
         setActionFeedback({
           type: 'success',
           message: `${key === 'registrationOpen' ? 'Registration Form' : 'Accommodation Form'} is now ${updatedVal ? 'ENABLED (ON)' : 'DISABLED (OFF)'}`
@@ -1043,33 +1043,29 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <nav className="hidden md:flex items-center gap-1 bg-brand-card/80 p-1.5 rounded-xl border border-brand-border">
               <button
                 onClick={() => { setActiveTab('dashboard'); setFilterPayment('ALL'); setFilterAccommodation('ALL'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
-                  activeTab === 'dashboard' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
               >
                 DASHBOARD
               </button>
               <button
                 onClick={() => { setActiveTab('registrations'); setFilterPayment('ALL'); setFilterAccommodation('ALL'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
-                  activeTab === 'registrations' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'registrations' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
               >
                 REGISTRATIONS
               </button>
               <button
                 onClick={() => { setActiveTab('payments'); setFilterPayment('PENDING'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
-                  activeTab === 'payments' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'payments' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
               >
                 PAYMENT STATUS
               </button>
               <button
                 onClick={() => { setActiveTab('accommodation'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
-                  activeTab === 'accommodation' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'accommodation' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
               >
                 <BedDouble size={13} />
                 ACCOMMODATION
@@ -1081,18 +1077,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </button>
               <button
                 onClick={() => { setActiveTab('leaderboard'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
-                  activeTab === 'leaderboard' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'leaderboard' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
               >
                 <Trophy size={13} className="text-yellow-400" />
                 LEADERBOARD
               </button>
               <button
                 onClick={() => { setActiveTab('timer'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${
-                  activeTab === 'timer' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'timer' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
               >
                 <Timer size={13} className={timerState.status === 'RUNNING' ? 'text-green-400 animate-pulse' : 'text-brand-orange'} />
                 STAGE TIMER
@@ -1129,33 +1123,29 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <div className="flex md:hidden overflow-x-auto py-2.5 gap-2 border-t border-brand-border/60 scrollbar-none">
             <button
               onClick={() => { setActiveTab('dashboard'); setFilterPayment('ALL'); setFilterAccommodation('ALL'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${
-                activeTab === 'dashboard' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${activeTab === 'dashboard' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
             >
               Dashboard
             </button>
             <button
               onClick={() => { setActiveTab('registrations'); setFilterPayment('ALL'); setFilterAccommodation('ALL'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${
-                activeTab === 'registrations' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${activeTab === 'registrations' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
             >
               Registrations
             </button>
             <button
               onClick={() => { setActiveTab('payments'); setFilterPayment('PENDING'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${
-                activeTab === 'payments' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${activeTab === 'payments' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
             >
               Payments
             </button>
             <button
               onClick={() => { setActiveTab('accommodation'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${
-                activeTab === 'accommodation' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${activeTab === 'accommodation' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
             >
               <BedDouble size={12} /> Accommodation
               {accommodations.length > 0 && (
@@ -1166,17 +1156,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </button>
             <button
               onClick={() => { setActiveTab('leaderboard'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${
-                activeTab === 'leaderboard' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${activeTab === 'leaderboard' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
             >
               <Trophy size={12} className="text-yellow-400" /> Leaderboard
             </button>
             <button
               onClick={() => { setActiveTab('timer'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${
-                activeTab === 'timer' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${activeTab === 'timer' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
             >
               <Timer size={12} className={timerState.status === 'RUNNING' ? 'text-green-400 animate-pulse' : 'text-brand-orange'} />
               Stage Timer
@@ -1195,11 +1183,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className={`fixed top-20 right-4 z-50 p-4 rounded-xl shadow-2xl border text-xs sm:text-sm font-mono flex items-center gap-2 max-w-md ${
-              actionFeedback.type === 'success'
-                ? 'bg-green-950/95 border-green-500/40 text-green-300'
-                : 'bg-red-950/95 border-red-500/40 text-red-300'
-            }`}
+            className={`fixed top-20 right-4 z-50 p-4 rounded-xl shadow-2xl border text-xs sm:text-sm font-mono flex items-center gap-2 max-w-md ${actionFeedback.type === 'success'
+              ? 'bg-green-950/95 border-green-500/40 text-green-300'
+              : 'bg-red-950/95 border-red-500/40 text-red-300'
+              }`}
           >
             {actionFeedback.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
             <span>{actionFeedback.message}</span>
@@ -1251,11 +1238,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             {/* The Two Toggles */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:min-w-[480px]">
               {/* 1. Registration Form Toggle */}
-              <div className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                formSettings.registrationOpen
-                  ? 'bg-green-500/10 border-green-500/30 text-white'
-                  : 'bg-red-500/10 border-red-500/30 text-brand-muted'
-              }`}>
+              <div className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${formSettings.registrationOpen
+                ? 'bg-green-500/10 border-green-500/30 text-white'
+                : 'bg-red-500/10 border-red-500/30 text-brand-muted'
+                }`}>
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${formSettings.registrationOpen ? 'bg-green-400 animate-ping' : 'bg-red-400'}`} />
@@ -1272,22 +1258,20 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   type="button"
                   onClick={() => handleToggleForm('registrationOpen')}
                   disabled={savingSettings}
-                  className={`px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all ${
-                    formSettings.registrationOpen
-                      ? 'bg-green-500 hover:bg-green-600 text-black shadow-lg shadow-green-500/20'
-                      : 'bg-brand-card hover:bg-brand-surface text-brand-muted border border-brand-border'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all ${formSettings.registrationOpen
+                    ? 'bg-green-500 hover:bg-green-600 text-black shadow-lg shadow-green-500/20'
+                    : 'bg-brand-card hover:bg-brand-surface text-brand-muted border border-brand-border'
+                    }`}
                 >
                   {formSettings.registrationOpen ? 'ON' : 'OFF'}
                 </button>
               </div>
 
               {/* 2. Accommodation Form Toggle */}
-              <div className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                formSettings.accommodationOpen
-                  ? 'bg-purple-500/10 border-purple-500/30 text-white'
-                  : 'bg-red-500/10 border-red-500/30 text-brand-muted'
-              }`}>
+              <div className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${formSettings.accommodationOpen
+                ? 'bg-purple-500/10 border-purple-500/30 text-white'
+                : 'bg-red-500/10 border-red-500/30 text-brand-muted'
+                }`}>
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${formSettings.accommodationOpen ? 'bg-purple-400 animate-ping' : 'bg-red-400'}`} />
@@ -1304,11 +1288,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   type="button"
                   onClick={() => handleToggleForm('accommodationOpen')}
                   disabled={savingSettings}
-                  className={`px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all ${
-                    formSettings.accommodationOpen
-                      ? 'bg-purple-500 hover:bg-purple-600 text-white shadow-lg shadow-purple-500/20'
-                      : 'bg-brand-card hover:bg-brand-surface text-brand-muted border border-brand-border'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all ${formSettings.accommodationOpen
+                    ? 'bg-purple-500 hover:bg-purple-600 text-white shadow-lg shadow-purple-500/20'
+                    : 'bg-brand-card hover:bg-brand-surface text-brand-muted border border-brand-border'
+                    }`}
                 >
                   {formSettings.accommodationOpen ? 'ON' : 'OFF'}
                 </button>
@@ -1437,34 +1420,30 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <div className="flex items-center gap-1.5 bg-brand-card p-1 rounded-xl border border-brand-border flex-wrap">
                 <button
                   onClick={() => setLeaderboardSubView('announcement')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 ${
-                    leaderboardSubView === 'announcement' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-bold shadow-lg' : 'text-yellow-400 hover:text-white'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 ${leaderboardSubView === 'announcement' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-bold shadow-lg' : 'text-yellow-400 hover:text-white'
+                    }`}
                 >
                   <Crown size={13} />
                   WINNER REVEAL
                 </button>
                 <button
                   onClick={() => setLeaderboardSubView('teams')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                    leaderboardSubView === 'teams' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${leaderboardSubView === 'teams' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white'
+                    }`}
                 >
                   Teams Rank
                 </button>
                 <button
                   onClick={() => setLeaderboardSubView('colleges')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                    leaderboardSubView === 'colleges' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${leaderboardSubView === 'colleges' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white'
+                    }`}
                 >
                   Top Colleges
                 </button>
                 <button
                   onClick={() => setLeaderboardSubView('domains')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                    leaderboardSubView === 'domains' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${leaderboardSubView === 'domains' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white'
+                    }`}
                 >
                   Tracks
                 </button>
@@ -1491,24 +1470,23 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   {/* Public Link & Current Stage Badge */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="px-3 py-1.5 rounded-xl bg-brand-card border border-brand-border font-mono text-xs flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${
-                        winnerState.stage === 'COMPLETED' ? 'bg-emerald-400' :
+                      <span className={`w-2 h-2 rounded-full ${winnerState.stage === 'COMPLETED' ? 'bg-emerald-400' :
                         winnerState.stage.includes('FIRST') ? 'bg-yellow-400 animate-pulse' :
-                        winnerState.stage.includes('COUNTDOWN') ? 'bg-red-500 animate-ping' :
-                        winnerState.stage.includes('SECOND') ? 'bg-slate-300 animate-pulse' :
-                        winnerState.stage.includes('THIRD') ? 'bg-amber-500 animate-pulse' :
-                        'bg-brand-muted'
-                      }`} />
+                          winnerState.stage.includes('COUNTDOWN') ? 'bg-red-500 animate-ping' :
+                            winnerState.stage.includes('SECOND') ? 'bg-slate-300 animate-pulse' :
+                              winnerState.stage.includes('THIRD') ? 'bg-amber-500 animate-pulse' :
+                                'bg-brand-muted'
+                        }`} />
                       <span className="text-brand-muted">STAGE:</span>
                       <strong className="text-white">
                         {winnerState.stage === 'NOT_STARTED' ? 'STANDBY (NOT STARTED)' :
-                         winnerState.stage === 'THIRD_ANNOUNCED' ? '3RD PRIZE REVEALED' :
-                         winnerState.stage === 'THIRD_DISTRIBUTION_COMPLETE' ? '3RD PRIZE DISTRIBUTION' :
-                         winnerState.stage === 'SECOND_ANNOUNCED' ? '2ND PRIZE REVEALED' :
-                         winnerState.stage === 'SECOND_DISTRIBUTION_COMPLETE' ? '2ND PRIZE DISTRIBUTION' :
-                         winnerState.stage === 'COUNTDOWN_RUNNING' ? '5S COUNTDOWN RUNNING' :
-                         winnerState.stage === 'FIRST_ANNOUNCED' ? '1ST PRIZE CHAMPIONS REVEALED' :
-                         'ALL WINNERS COMPLETED'}
+                          winnerState.stage === 'THIRD_ANNOUNCED' ? '3RD PRIZE REVEALED' :
+                            winnerState.stage === 'THIRD_DISTRIBUTION_COMPLETE' ? '3RD PRIZE DISTRIBUTION' :
+                              winnerState.stage === 'SECOND_ANNOUNCED' ? '2ND PRIZE REVEALED' :
+                                winnerState.stage === 'SECOND_DISTRIBUTION_COMPLETE' ? '2ND PRIZE DISTRIBUTION' :
+                                  winnerState.stage === 'COUNTDOWN_RUNNING' ? '5S COUNTDOWN RUNNING' :
+                                    winnerState.stage === 'FIRST_ANNOUNCED' ? '1ST PRIZE CHAMPIONS REVEALED' :
+                                      'ALL WINNERS COMPLETED'}
                       </strong>
                     </div>
 
@@ -1679,11 +1657,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleAnnounceThird}
                       disabled={winnerState.stage !== 'NOT_STARTED' || !winnerState.thirdPlace}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'NOT_STARTED' && winnerState.thirdPlace
-                          ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white shadow-lg active:scale-95'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'NOT_STARTED' && winnerState.thirdPlace
+                        ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white shadow-lg active:scale-95'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <span className="text-2xl">🥉</span>
                       <span>1. ANNOUNCE 3RD PRIZE</span>
@@ -1694,11 +1671,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleCompleteThirdDistribution}
                       disabled={winnerState.stage !== 'THIRD_ANNOUNCED'}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'THIRD_ANNOUNCED'
-                          ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg active:scale-95 animate-pulse'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'THIRD_ANNOUNCED'
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg active:scale-95 animate-pulse'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <CheckCircle size={24} className="text-amber-300" />
                       <span>2. PRIZE DISTRIBUTION COMPLETE</span>
@@ -1709,11 +1685,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleAnnounceSecond}
                       disabled={winnerState.stage !== 'THIRD_DISTRIBUTION_COMPLETE' || !winnerState.secondPlace}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'THIRD_DISTRIBUTION_COMPLETE' && winnerState.secondPlace
-                          ? 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-400 hover:to-slate-500 text-white shadow-lg active:scale-95'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'THIRD_DISTRIBUTION_COMPLETE' && winnerState.secondPlace
+                        ? 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-400 hover:to-slate-500 text-white shadow-lg active:scale-95'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <span className="text-2xl">🥈</span>
                       <span>3. ANNOUNCE 2ND PRIZE</span>
@@ -1724,11 +1699,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleCompleteSecondDistribution}
                       disabled={winnerState.stage !== 'SECOND_ANNOUNCED'}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'SECOND_ANNOUNCED'
-                          ? 'bg-slate-600 hover:bg-slate-500 text-white shadow-lg active:scale-95 animate-pulse'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'SECOND_ANNOUNCED'
+                        ? 'bg-slate-600 hover:bg-slate-500 text-white shadow-lg active:scale-95 animate-pulse'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <CheckCircle size={24} className="text-slate-300" />
                       <span>4. PRIZE DISTRIBUTION COMPLETE</span>
@@ -1741,11 +1715,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleStartCountdown}
                       disabled={winnerState.stage !== 'SECOND_DISTRIBUTION_COMPLETE' || !winnerState.firstPlace}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'SECOND_DISTRIBUTION_COMPLETE' && winnerState.firstPlace
-                          ? 'bg-gradient-to-r from-red-600 to-brand-primary hover:from-red-500 hover:to-brand-primaryLight text-white shadow-glow-red active:scale-95 animate-pulse'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'SECOND_DISTRIBUTION_COMPLETE' && winnerState.firstPlace
+                        ? 'bg-gradient-to-r from-red-600 to-brand-primary hover:from-red-500 hover:to-brand-primaryLight text-white shadow-glow-red active:scale-95 animate-pulse'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <Clock size={24} className="text-red-300" />
                       <span>5. START 5 SECOND COUNTDOWN</span>
@@ -1756,11 +1729,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleAnnounceFirst}
                       disabled={winnerState.stage !== 'COUNTDOWN_RUNNING' && winnerState.stage !== 'SECOND_DISTRIBUTION_COMPLETE'}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'COUNTDOWN_RUNNING'
-                          ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-black font-black shadow-lg shadow-yellow-500/30'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'COUNTDOWN_RUNNING'
+                        ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-black font-black shadow-lg shadow-yellow-500/30'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <Crown size={24} className="text-yellow-400" />
                       <span>6. ANNOUNCE 1ST PRIZE</span>
@@ -1771,11 +1743,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <button
                       onClick={handleCompleteAnnouncement}
                       disabled={winnerState.stage !== 'FIRST_ANNOUNCED'}
-                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${
-                        winnerState.stage === 'FIRST_ANNOUNCED'
-                          ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg active:scale-95'
-                          : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
-                      }`}
+                      className={`p-4 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center gap-1.5 text-center transition-all ${winnerState.stage === 'FIRST_ANNOUNCED'
+                        ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg active:scale-95'
+                        : 'bg-brand-card/40 border border-brand-border text-brand-muted opacity-40 cursor-not-allowed'
+                        }`}
                     >
                       <Trophy size={24} className="text-yellow-300" />
                       <span>7. COMPLETE & SHOW PODIUM</span>
@@ -1878,13 +1849,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             {/* Payment Status */}
                             <td className="py-3.5 px-4">
                               <span
-                                className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${
-                                  reg.paymentStatus === 'VERIFIED'
-                                    ? 'bg-green-500/10 text-green-400 border border-green-500/30'
-                                    : reg.paymentStatus === 'REJECTED'
+                                className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${reg.paymentStatus === 'VERIFIED'
+                                  ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                                  : reg.paymentStatus === 'REJECTED'
                                     ? 'bg-red-500/10 text-red-400 border border-red-500/30'
                                     : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30'
-                                }`}
+                                  }`}
                               >
                                 {reg.paymentStatus || 'PENDING'}
                               </span>
@@ -2020,20 +1990,19 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               {/* Top Launch Button */}
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-card border border-brand-border text-xs font-mono">
-                  <span className={`w-2 h-2 rounded-full ${
-                    timerState.status === 'RUNNING' ? 'bg-green-400 animate-ping' :
+                  <span className={`w-2 h-2 rounded-full ${timerState.status === 'RUNNING' ? 'bg-green-400 animate-ping' :
                     timerState.status === 'PAUSED' ? 'bg-amber-400' :
-                    timerState.status === 'ENDED' ? 'bg-red-500' : 'bg-brand-muted'
-                  }`} />
+                      timerState.status === 'ENDED' ? 'bg-red-500' : 'bg-brand-muted'
+                    }`} />
                   <span className="text-brand-muted">STATUS:</span>
                   <strong className={
                     timerState.status === 'RUNNING' ? 'text-green-400' :
-                    timerState.status === 'PAUSED' ? 'text-amber-400' :
-                    timerState.status === 'ENDED' ? 'text-red-400' : 'text-cyan-400'
+                      timerState.status === 'PAUSED' ? 'text-amber-400' :
+                        timerState.status === 'ENDED' ? 'text-red-400' : 'text-cyan-400'
                   }>
                     {timerState.status === 'RUNNING' ? 'RUNNING' :
-                     timerState.status === 'PAUSED' ? 'PAUSED' :
-                     timerState.status === 'ENDED' ? 'CODE FREEZE' : 'READY'}
+                      timerState.status === 'PAUSED' ? 'PAUSED' :
+                        timerState.status === 'ENDED' ? 'CODE FREEZE' : 'READY'}
                   </strong>
                 </span>
 
@@ -2307,11 +2276,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         setTimerCustomMins(0)
                         handleConfigureDuration(p.hours, 0)
                       }}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        timerPresetHours === p.hours
-                          ? 'border-brand-primary bg-brand-primary/15 text-white'
-                          : 'border-brand-border bg-brand-card hover:bg-brand-surface text-brand-muted hover:text-white'
-                      }`}
+                      className={`p-3 rounded-xl border text-left transition-all ${timerPresetHours === p.hours
+                        ? 'border-brand-primary bg-brand-primary/15 text-white'
+                        : 'border-brand-border bg-brand-card hover:bg-brand-surface text-brand-muted hover:text-white'
+                        }`}
                     >
                       <div className="font-mono text-xs font-bold">{p.label}</div>
                       <div className="font-mono text-[9px] text-brand-orange mt-0.5">{p.tag}</div>
@@ -2728,13 +2696,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <td className="py-3.5 px-4">
                               <div className="space-y-1">
                                 <div>
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${
-                                    item.accommodationStatus === 'VERIFIED'
-                                      ? 'bg-green-500/20 text-green-300 border border-green-500/40'
-                                      : item.accommodationStatus === 'REJECTED'
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${item.accommodationStatus === 'VERIFIED'
+                                    ? 'bg-green-500/20 text-green-300 border border-green-500/40'
+                                    : item.accommodationStatus === 'REJECTED'
                                       ? 'bg-red-500/20 text-red-300 border border-red-500/40'
                                       : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40'
-                                  }`}>
+                                    }`}>
                                     {item.accommodationStatus === 'VERIFIED' && <Check size={10} />}
                                     {item.accommodationStatus === 'REJECTED' && <X size={10} />}
                                     {item.accommodationStatus === 'PENDING' && <Clock size={10} />}
@@ -2742,9 +2709,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   </span>
                                 </div>
                                 <div>
-                                  <span className={`inline-flex items-center gap-1 font-mono text-[9px] ${
-                                    item.emailStatus === 'SENT' ? 'text-green-400' : 'text-brand-muted'
-                                  }`}>
+                                  <span className={`inline-flex items-center gap-1 font-mono text-[9px] ${item.emailStatus === 'SENT' ? 'text-green-400' : 'text-brand-muted'
+                                    }`}>
                                     <Mail size={10} /> Email: {item.emailStatus || 'PENDING'}
                                   </span>
                                 </div>
@@ -2807,13 +2773,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <h3 className="font-bold text-white text-base mt-0.5">{item.teamName}</h3>
                             <div className="font-mono text-xs text-cyan-400">Team Code: {item.teamCode}</div>
                           </div>
-                          <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${
-                            item.accommodationStatus === 'VERIFIED'
-                              ? 'bg-green-500/20 text-green-300 border border-green-500/40'
-                              : item.accommodationStatus === 'REJECTED'
+                          <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${item.accommodationStatus === 'VERIFIED'
+                            ? 'bg-green-500/20 text-green-300 border border-green-500/40'
+                            : item.accommodationStatus === 'REJECTED'
                               ? 'bg-red-500/20 text-red-300 border border-red-500/40'
                               : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40'
-                          }`}>
+                            }`}>
                             {item.accommodationStatus || 'PENDING'}
                           </span>
                         </div>
@@ -3244,13 +3209,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             {/* Payment & Email Status Badges */}
                             <td className="py-3.5 px-4">
                               <span
-                                className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${
-                                  reg.paymentStatus === 'VERIFIED'
-                                    ? 'bg-green-500/10 text-green-400 border border-green-500/30'
-                                    : reg.paymentStatus === 'REJECTED'
+                                className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${reg.paymentStatus === 'VERIFIED'
+                                  ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                                  : reg.paymentStatus === 'REJECTED'
                                     ? 'bg-red-500/10 text-red-400 border border-red-500/30'
                                     : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30'
-                                }`}
+                                  }`}
                               >
                                 {reg.paymentStatus || 'PENDING'}
                               </span>
@@ -3326,13 +3290,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             </p>
                           </div>
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${
-                              reg.paymentStatus === 'VERIFIED'
-                                ? 'bg-green-500/10 text-green-400 border border-green-500/30'
-                                : reg.paymentStatus === 'REJECTED'
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${reg.paymentStatus === 'VERIFIED'
+                              ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                              : reg.paymentStatus === 'REJECTED'
                                 ? 'bg-red-500/10 text-red-400 border border-red-500/30'
                                 : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30'
-                            }`}
+                              }`}
                           >
                             {reg.paymentStatus || 'PENDING'}
                           </span>
@@ -3553,9 +3516,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                     <div>
                       <div className="text-brand-muted font-mono text-[10px]">PAYMENT STATUS</div>
-                      <div className={`font-mono font-bold ${
-                        selectedReg.paymentStatus === 'VERIFIED' ? 'text-green-400' : selectedReg.paymentStatus === 'REJECTED' ? 'text-red-400' : 'text-yellow-400'
-                      }`}>
+                      <div className={`font-mono font-bold ${selectedReg.paymentStatus === 'VERIFIED' ? 'text-green-400' : selectedReg.paymentStatus === 'REJECTED' ? 'text-red-400' : 'text-yellow-400'
+                        }`}>
                         {selectedReg.paymentStatus || 'PENDING'}
                       </div>
                     </div>
@@ -4261,13 +4223,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="p-3 rounded-xl bg-brand-card border border-brand-border">
                     <span className="font-mono text-[10px] text-brand-muted uppercase block">Accommodation Status</span>
-                    <span className={`font-mono font-bold text-sm mt-0.5 inline-block ${
-                      selectedAccommodation.accommodationStatus === 'VERIFIED'
-                        ? 'text-green-400'
-                        : selectedAccommodation.accommodationStatus === 'REJECTED'
+                    <span className={`font-mono font-bold text-sm mt-0.5 inline-block ${selectedAccommodation.accommodationStatus === 'VERIFIED'
+                      ? 'text-green-400'
+                      : selectedAccommodation.accommodationStatus === 'REJECTED'
                         ? 'text-red-400'
                         : 'text-yellow-400'
-                    }`}>
+                      }`}>
                       {selectedAccommodation.accommodationStatus || 'PENDING'}
                     </span>
                     {selectedAccommodation.rejectionReason && (
@@ -4278,9 +4239,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   </div>
                   <div className="p-3 rounded-xl bg-brand-card border border-brand-border">
                     <span className="font-mono text-[10px] text-brand-muted uppercase block">Confirmation Email</span>
-                    <span className={`font-mono font-bold text-sm mt-0.5 inline-block ${
-                      selectedAccommodation.emailStatus === 'SENT' ? 'text-green-400' : 'text-brand-muted'
-                    }`}>
+                    <span className={`font-mono font-bold text-sm mt-0.5 inline-block ${selectedAccommodation.emailStatus === 'SENT' ? 'text-green-400' : 'text-brand-muted'
+                      }`}>
                       {selectedAccommodation.emailStatus || 'PENDING'}
                     </span>
                     <div className="font-mono text-[10px] text-brand-muted mt-1 truncate">

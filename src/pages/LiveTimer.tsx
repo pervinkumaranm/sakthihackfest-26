@@ -102,7 +102,9 @@ export default function LiveTimer() {
   }
 
   // Format hours, minutes, seconds
-  const totalSec = Math.max(0, timerState.remainingSeconds)
+  const totalSec = timerState.status === 'STOPPED'
+    ? Math.max(0, timerState.configuredDurationSeconds || 86400)
+    : Math.max(0, timerState.remainingSeconds)
   const hours = Math.floor(totalSec / 3600)
   const minutes = Math.floor((totalSec % 3600) / 60)
   const seconds = totalSec % 60

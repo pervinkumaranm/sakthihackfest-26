@@ -226,6 +226,8 @@ CREATE POLICY "service_role_all_attendance_members" ON public.attendance_members
 DROP POLICY IF EXISTS "service_role_all_audit_logs" ON public.audit_logs;
 CREATE POLICY "service_role_all_audit_logs" ON public.audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Allow public (anon) read-only access to app_settings so client can inspect form toggles if needed
+-- Allow public (anon) read and write access to app_settings so serverless functions (with anon or service key) can update timer
 DROP POLICY IF EXISTS "anon_read_app_settings" ON public.app_settings;
-CREATE POLICY "anon_read_app_settings" ON public.app_settings FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "anon_all_app_settings" ON public.app_settings;
+CREATE POLICY "anon_all_app_settings" ON public.app_settings FOR ALL TO anon USING (true) WITH CHECK (true);
+

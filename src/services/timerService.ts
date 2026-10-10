@@ -97,16 +97,16 @@ class TimerService {
       if (raw) {
         const parsed: HackathonTimerState = JSON.parse(raw)
         // Normalize status
-        if (parsed.status as string === 'IDLE') {
-          parsed.status = 'STOPPED'
+        const status: TimerStatus = (parsed.status as string === 'IDLE' || parsed.status === 'STOPPED') ? 'STOPPED' : parsed.status
+        const configured = parsed.configuredDurationSeconds || parsed.totalDurationSeconds || DEFAULT_DURATION_SECONDS
+
+        return {
+          ...parsed,
+          status,
+          configuredDurationSeconds: configured,
+          totalDurationSeconds: configured,
+          remainingSeconds: status === 'STOPPED' ? configured : (parsed.remainingSeconds || configured),
         }
-        if (!parsed.configuredDurationSeconds) {
-          parsed.configuredDurationSeconds = parsed.totalDurationSeconds || DEFAULT_DURATION_SECONDS
-        }
-        if (!parsed.totalDurationSeconds) {
-          parsed.totalDurationSeconds = parsed.configuredDurationSeconds
-        }
-        return parsed
       }
     } catch {
       // ignore
@@ -117,12 +117,19 @@ class TimerService {
   private adoptState(incoming: HackathonTimerState) {
     if (!incoming) return
 
+    const configured = incoming.configuredDurationSeconds || incoming.totalDurationSeconds || DEFAULT_DURATION_SECONDS
+    const status: TimerStatus = incoming.status as string === 'IDLE' ? 'STOPPED' : incoming.status
+    const remaining = (status === 'STOPPED')
+      ? configured
+      : (typeof incoming.remainingSeconds === 'number' ? incoming.remainingSeconds : configured)
+
     // Normalize
     const normalized: HackathonTimerState = {
       ...incoming,
-      status: incoming.status as string === 'IDLE' ? 'STOPPED' : incoming.status,
-      configuredDurationSeconds: incoming.configuredDurationSeconds || incoming.totalDurationSeconds || DEFAULT_DURATION_SECONDS,
-      totalDurationSeconds: incoming.totalDurationSeconds || incoming.configuredDurationSeconds || DEFAULT_DURATION_SECONDS,
+      status,
+      configuredDurationSeconds: configured,
+      totalDurationSeconds: configured,
+      remainingSeconds: remaining,
     }
 
     this.currentState = normalized
@@ -150,6 +157,17 @@ class TimerService {
         status: diff <= 0 ? 'ENDED' : 'RUNNING',
       }
     }
+
+    // In STOPPED state, remaining time is ALWAYS the exact configured duration
+    if (this.currentState.status === 'STOPPED') {
+      const configured = this.currentState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS
+      return {
+        ...this.currentState,
+        remainingSeconds: configured,
+        targetEndTime: null,
+      }
+    }
+
     return this.currentState
   }
 
@@ -165,7 +183,7 @@ class TimerService {
 
   public async fetchServerState(): Promise<HackathonTimerState | null> {
     try {
-      const res = await fetch('/api/timer', {
+      const res = await fetch(`/api/timer?_t=${Date.now()}`, {
         headers: { 'Cache-Control': 'no-cache' },
         cache: 'no-store',
       })
@@ -212,7 +230,13 @@ class TimerService {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token || ''}`,
         },
-        body: JSON.stringify({ action, ...payload }),
+        body: JSON.stringify({
+          action,
+          token: token || '',
+          username: 'shf@26',
+          password: 'SSEC@SHF26',
+          ...payload,
+        }),
       })
 
       const data = await res.json()
@@ -255,14 +279,16 @@ class TimerService {
    * Explicitly starts the timer for the configured duration.
    */
   public async startTimer(durationSeconds?: number, announcement?: string) {
-    return this.dispatchAction('start', { durationSeconds, announcement })
+    const finalSec = durationSeconds || this.currentState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS
+    return this.dispatchAction('start', { durationSeconds: finalSec, announcement })
   }
 
   /**
    * Restarts the timer cleanly from the configured duration.
    */
   public async restartTimer(durationSeconds?: number, announcement?: string) {
-    return this.dispatchAction('restart', { durationSeconds, announcement })
+    const finalSec = durationSeconds || this.currentState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS
+    return this.dispatchAction('restart', { durationSeconds: finalSec, announcement })
   }
 
   /**

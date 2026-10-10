@@ -367,7 +367,9 @@ export const apiService = {
 
       if (res.ok && data.success && data.token) {
         sessionStorage.setItem('shf26_admin_token', data.token)
+        localStorage.setItem('shf26_admin_token', data.token)
         sessionStorage.setItem('shf26_admin_user', data.user?.username || username)
+        localStorage.setItem('shf26_admin_user', data.user?.username || username)
         return { success: true, data: { token: data.token, user: data.user } }
       }
       return { success: false, error: data.error || 'Invalid administrator credentials.' }
@@ -385,19 +387,32 @@ export const apiService = {
 
   adminLogout() {
     sessionStorage.removeItem('shf26_admin_token')
+    localStorage.removeItem('shf26_admin_token')
     sessionStorage.removeItem('shf26_admin_user')
+    localStorage.removeItem('shf26_admin_user')
   },
 
   isAdminAuthenticated(): boolean {
-    return Boolean(sessionStorage.getItem('shf26_admin_token'))
+    return Boolean(
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('shf26_admin_token')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('shf26_admin_token'))
+    )
   },
 
   getAdminUser(): string | null {
-    return sessionStorage.getItem('shf26_admin_user')
+    return (
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('shf26_admin_user')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('shf26_admin_user')) ||
+      null
+    )
   },
 
   getAdminToken(): string | null {
-    return sessionStorage.getItem('shf26_admin_token')
+    return (
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('shf26_admin_token')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('shf26_admin_token')) ||
+      null
+    )
   },
 
   /**

@@ -193,7 +193,13 @@ async function getTimerFromDb(): Promise<PersistedTimerState | null> {
     return null;
   }
 
-  const val = data.value as any;
+  let val = data.value as any;
+  if (typeof val === 'string') {
+    try {
+      val = JSON.parse(val);
+    } catch (_) {}
+  }
+
   // Normalize fields
   const status: TimerStatus =
     val.status === 'RUNNING' ? 'RUNNING' :
@@ -202,12 +208,25 @@ async function getTimerFromDb(): Promise<PersistedTimerState | null> {
 
   const configured = Number(val.configuredDurationSeconds || val.totalDurationSeconds || DEFAULT_DURATION_SECONDS);
 
+  let remaining = configured;
+  if (status === 'RUNNING' && typeof val.targetEndTime === 'number') {
+    const diff = Math.max(0, Math.round((val.targetEndTime - Date.now()) / 1000));
+    remaining = diff;
+  } else if (status === 'PAUSED' && typeof val.remainingSeconds === 'number' && val.remainingSeconds > 0) {
+    remaining = val.remainingSeconds;
+  } else if (status === 'ENDED') {
+    remaining = 0;
+  } else {
+    // When STOPPED, countdown always starts cleanly from the configured duration!
+    remaining = configured;
+  }
+
   return {
     status,
     configuredDurationSeconds: configured,
     totalDurationSeconds: configured,
-    remainingSeconds: typeof val.remainingSeconds === 'number' ? val.remainingSeconds : configured,
-    targetEndTime: typeof val.targetEndTime === 'number' ? val.targetEndTime : null,
+    remainingSeconds: remaining,
+    targetEndTime: status === 'RUNNING' && typeof val.targetEndTime === 'number' ? val.targetEndTime : null,
     startedAt: typeof val.startedAt === 'number' ? val.startedAt : null,
     pausedAt: typeof val.pausedAt === 'number' ? val.pausedAt : null,
     stoppedAt: typeof val.stoppedAt === 'number' ? val.stoppedAt : null,
@@ -229,9 +248,23 @@ async function setTimerInDb(state: PersistedTimerState, updatedBy: string): Prom
     updated_by: updatedBy,
   };
 
-  const { error } = await supabase.from('app_settings').upsert(record, { onConflict: 'key' });
+  // Try standard upsert first
+  const { error } = await supabase.from('app_settings').upsert(record);
   if (error) {
-    throw new Error(`Failed to save timer in Supabase app_settings: ${error.message}`);
+    // Try update if row already exists
+    const updateRes = await supabase
+      .from('app_settings')
+      .update({ value: state, updated_at: nowIso, updated_by: updatedBy })
+      .eq('key', 'hackathon_timer');
+    if (updateRes.error) {
+      console.warn('[TimerAPI] Both upsert and update failed on app_settings:', error.message, updateRes.error.message);
+      // Try insert if row did not exist
+      const insertRes = await supabase.from('app_settings').insert(record);
+      if (insertRes.error) {
+        console.error('[TimerAPI] Insert failed as well:', insertRes.error.message);
+        throw new Error(`Failed to save timer in Supabase app_settings: ${error.message}`);
+      }
+    }
   }
 
   return state;
@@ -320,30 +353,62 @@ function calculateLiveRemaining(state: PersistedTimerState): PersistedTimerState
       remainingSeconds: remaining,
     };
   }
+  if (state.status === 'STOPPED') {
+    return {
+      ...state,
+      remainingSeconds: state.configuredDurationSeconds || DEFAULT_DURATION_SECONDS,
+      targetEndTime: null,
+    };
+  }
   return state;
 }
 
 // ── HTTP Request Handler ───────────────────────────────────────────────────
 
-export default async function handler(req: any, res: any) {
-  if (typeof res?.setHeader === 'function') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-  }
+export default async function handler(req: any, res?: any) {
+  const isEdge = req instanceof Request || (!res && typeof req.json === 'function');
+  const urlObj = isEdge ? new URL(req.url, 'http://localhost') : null;
+  const method = isEdge ? req.method : req.method;
 
-  if (req.method === 'OPTIONS') {
+  const corsHeaders: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  };
+
+  const send = (status: number, data: any) => {
+    if (isEdge) {
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+    if (typeof res?.setHeader === 'function') {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+    }
+    return res.status(status).json(data);
+  };
+
+  if (method === 'OPTIONS') {
+    if (isEdge) {
+      return new Response(null, { status: 200, headers: corsHeaders });
+    }
+    if (typeof res?.setHeader === 'function') {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+    }
     return res.status(200).end();
   }
 
   // ── GET: Public fetch of current authoritative timer state ───────────────
-  if (req.method === 'GET') {
+  if (method === 'GET') {
     try {
-      const force = req.query?.force === 'true';
-      const liveState = await fetchAuthoritativeTimer(force);
+      const forceParam = isEdge
+        ? urlObj?.searchParams.get('force') === 'true'
+        : req.query?.force === 'true';
+      const liveState = await fetchAuthoritativeTimer(forceParam);
 
       // If timer has naturally concluded, transition persisted state to ENDED
       if (liveState.status === 'ENDED' && cachedTimerState.status === 'RUNNING') {
@@ -352,13 +417,13 @@ export default async function handler(req: any, res: any) {
         } catch (_) {}
       }
 
-      return res.status(200).json({
+      return send(200, {
         success: true,
         state: liveState,
       });
     } catch (err: any) {
       console.error('[TimerAPI] Error handling GET:', err);
-      return res.status(500).json({
+      return send(500, {
         success: false,
         error: 'Failed to retrieve authoritative timer state.',
       });
@@ -366,26 +431,43 @@ export default async function handler(req: any, res: any) {
   }
 
   // ── POST: Protected timer operations (Admin only) ────────────────────────
-  if (req.method === 'POST') {
-    const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (method === 'POST') {
+    let rawBody: any = {};
+    try {
+      rawBody = isEdge
+        ? await req.json()
+        : (typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}));
+    } catch {
+      rawBody = {};
+    }
+    const body = rawBody || {};
+
+    const authHeader = isEdge
+      ? (req.headers.get('authorization') || req.headers.get('Authorization') || '')
+      : (req.headers?.authorization || req.headers?.Authorization || (typeof req.headers?.get === 'function' ? req.headers.get('authorization') : '') || '');
+
     let token = '';
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.slice(7).trim();
     }
+    if (!token && body.token) {
+      token = String(body.token).trim();
+    }
 
-    const body = req.body || {};
     const authResult = verifyAdminToken(token);
-    const isMasterAuth = body.username === 'shf@26' && body.password === 'SSEC@SHF26';
+    const isMasterAuth =
+      (body.username === 'shf@26' && body.password === 'SSEC@SHF26') ||
+      (body.adminUser === 'shf@26' && body.adminPass === 'SSEC@SHF26');
 
     if (!authResult.valid && !isMasterAuth) {
-      return res.status(401).json({
+      return send(401, {
         success: false,
         error: 'Unauthorized. Valid administrator session required for timer control.',
       });
     }
 
     const adminUser = authResult.username || body.username || 'admin';
-    const action = body.action || '';
+    const action = String(body.action || '').trim().toLowerCase();
 
     try {
       // Always pull freshest authoritative state before applying transitions
@@ -398,7 +480,7 @@ export default async function handler(req: any, res: any) {
         case 'configure': {
           const duration = Number(body.durationSeconds);
           if (!duration || duration <= 0) {
-            return res.status(400).json({
+            return send(400, {
               success: false,
               error: 'Invalid duration. Duration must be a positive number of seconds.',
             });
@@ -419,7 +501,7 @@ export default async function handler(req: any, res: any) {
 
         // ── 2. START TIMER ──────────────────────────────────────────────────
         case 'start': {
-          // Determine duration: explicitly passed duration or persisted configured duration
+          // Explicit duration passed from UI, or configured duration in DB
           const duration = Number(body.durationSeconds) || nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
           const targetEndTime = now + duration * 1000;
 
@@ -454,24 +536,23 @@ export default async function handler(req: any, res: any) {
           nextState.pausedAt = null;
           nextState.stoppedAt = null;
 
+          if (body.announcement !== undefined) {
+            nextState.announcement = String(body.announcement);
+          }
+
           console.log(`[TimerAPI] Admin ${adminUser} RESTARTED timer cleanly for ${duration}s (${(duration / 3600).toFixed(1)}h).`);
           break;
         }
 
         // ── 3. STOP TIMER ───────────────────────────────────────────────────
         case 'stop': {
-          // Freeze remaining time at the exact moment of stopping
-          if (nextState.status === 'RUNNING' && nextState.targetEndTime) {
-            nextState.remainingSeconds = Math.max(0, Math.round((nextState.targetEndTime - now) / 1000));
-          } else if (!nextState.remainingSeconds || nextState.remainingSeconds <= 0) {
-            nextState.remainingSeconds = nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
-          }
-
           nextState.status = 'STOPPED';
           nextState.targetEndTime = null;
           nextState.stoppedAt = now;
+          // In stopped state, remaining time is reset to configured duration ready for start
+          nextState.remainingSeconds = nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
 
-          console.log(`[TimerAPI] Admin ${adminUser} stopped timer. Remaining: ${nextState.remainingSeconds}s.`);
+          console.log(`[TimerAPI] Admin ${adminUser} stopped timer. Reset to configured: ${nextState.remainingSeconds}s.`);
           break;
         }
 
@@ -492,7 +573,7 @@ export default async function handler(req: any, res: any) {
         // ── 5. RESUME TIMER ─────────────────────────────────────────────────
         case 'resume': {
           if (nextState.status !== 'PAUSED' && nextState.status !== 'STOPPED') {
-            return res.status(400).json({
+            return send(400, {
               success: false,
               error: 'Timer is not currently paused or stopped.',
               state: nextState,
@@ -582,28 +663,28 @@ export default async function handler(req: any, res: any) {
         }
 
         default:
-          return res.status(400).json({
+          return send(400, {
             success: false,
-            error: `Unknown action '${action}'. Supported actions: configure, start, stop, pause, resume, reset, end, adjust_time, set_announcement.`,
+            error: `Unknown action '${action}'. Supported actions: configure, start, restart, stop, pause, resume, reset, end, adjust_time, set_announcement.`,
           });
       }
 
       // Persist the updated authoritative state
       const savedState = await persistTimerState(nextState, adminUser);
 
-      return res.status(200).json({
+      return send(200, {
         success: true,
         message: `Timer action '${action}' applied successfully.`,
         state: savedState,
       });
     } catch (err: any) {
       console.error(`[TimerAPI] Failed to execute action '${action}':`, err);
-      return res.status(500).json({
+      return send(500, {
         success: false,
         error: err.message || 'Internal server error while updating timer.',
       });
     }
   }
 
-  return res.status(405).json({ success: false, error: 'Method Not Allowed' });
+  return send(405, { success: false, error: 'Method Not Allowed' });
 }
