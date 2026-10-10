@@ -21,8 +21,9 @@ export default defineConfig(({ mode }) => {
             const isWinners = req.url === '/api/winners' || req.url?.startsWith('/api/winners')
             const isAccommodation = req.url === '/api/accommodation' || req.url?.startsWith('/api/accommodation?')
             const isSettings = req.url === '/api/settings' || req.url?.startsWith('/api/settings?')
+            const isFeedback = req.url === '/api/feedback' || req.url?.startsWith('/api/feedback?')
 
-            if (isRegister || isAdmin || isAttendance || isTimer || isWinners || isAccommodation || isSettings) {
+            if (isRegister || isAdmin || isAttendance || isTimer || isWinners || isAccommodation || isSettings || isFeedback) {
               // Reload environment variables from .env on every request
               const currentEnv = loadEnv(mode, process.cwd(), '')
               Object.assign(process.env, currentEnv)
@@ -37,17 +38,19 @@ export default defineConfig(({ mode }) => {
                   const targetModule = isRegister
                     ? '/api/register.ts'
                     : isAdmin
-                    ? '/api/admin.ts'
-                    : isAttendance
-                    ? '/api/attendance.ts'
-                    : isTimer
-                    ? '/api/timer.ts'
-                    : isWinners
-                    ? '/api/winners.ts'
-                    : isAccommodation
-                    ? '/api/accommodation.ts'
-                    : '/api/settings.ts'
-                  
+                      ? '/api/admin.ts'
+                      : isAttendance
+                        ? '/api/attendance.ts'
+                        : isTimer
+                          ? '/api/timer.ts'
+                          : isWinners
+                            ? '/api/winners.ts'
+                            : isAccommodation
+                              ? '/api/accommodation.ts'
+                              : isFeedback
+                                ? '/api/feedback.ts'
+                                : '/api/settings.ts'
+
                   // Dynamically load the TypeScript API function using Vite's SSR runtime
                   const apiModule = await server.ssrLoadModule(targetModule)
                   const handler = apiModule.default

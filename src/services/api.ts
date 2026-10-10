@@ -5,7 +5,7 @@
  * email status tracking, and admin verification actions.
  */
 
-import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus, StoredAccommodation, AppSettings, AccommodationStatus } from '../types'
+import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus, StoredAccommodation, AppSettings, AccommodationStatus, ParticipantFeedbackPayload } from '../types'
 import * as XLSX from 'xlsx'
 import { IS_REGISTRATION_CLOSED } from '../../config/event'
 
@@ -910,6 +910,22 @@ export const apiService = {
       return json
     } catch (e: any) {
       return { success: false, error: e.message || 'Failed to update form settings.' }
+    }
+  },
+
+  async submitFeedback(payload: ParticipantFeedbackPayload): Promise<ApiResponse<{ id: string; createdAt?: string }>> {
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      return json
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error occurred while submitting feedback.' }
     }
   },
 }

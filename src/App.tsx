@@ -12,6 +12,7 @@ import Rules from './pages/Rules'
 import FAQ from './pages/FAQ'
 import Contact from './pages/Contact'
 import AccommodationForm from './pages/AccommodationForm'
+import Feedback from './pages/Feedback'
 import ManageRegistrations from './pages/admin/ManageRegistrations'
 
 import LiveTimer from './pages/LiveTimer'
@@ -65,6 +66,8 @@ export default function App() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/accommodation-form" element={<AccommodationForm />} />
             <Route path="/accommodation" element={<Navigate to="/accommodation-form" replace />} />
+            {/* Participant Feedback Form */}
+            <Route path="/feedback" element={<Feedback />} />
             {/* Live Synchronized Stage Timer */}
             <Route path="/live-timer" element={<LiveTimer />} />
             <Route path="/timer" element={<LiveTimer />} />

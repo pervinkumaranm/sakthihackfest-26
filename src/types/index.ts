@@ -120,3 +120,32 @@ export interface AppSettings {
   lastUpdated?: string
   updatedBy?: string
 }
+
+export interface ParticipantFeedbackPayload {
+  participantName: string
+  teamName: string
+  q1_registration_experience: string
+  q2_registration_issues: string
+  q3_problem_statement_clarity: string
+  q4_scenarios_usefulness: string
+  q5_hints_helpfulness: string
+  q6_constraints_timing_clarity: string
+  q7_adaptability_fairness: string
+  q8_first_evaluation_fairness: string
+  q9_final_evaluation_fairness: string
+  q10_judges_technical_knowledge: string
+  q11_judges_fair_opportunity: string
+  q12_evaluation_criteria_consistency: string
+  q13_portal_experience: string
+  q14_portal_issues: string
+  q15_organizer_communication: string
+  q16_food_and_refreshments: string
+  q17_venue_and_facilities: string
+  q18_overall_feedback: string
+}
+
+export interface StoredParticipantFeedback extends ParticipantFeedbackPayload {
+  id: string
+  created_at: string
+}
+
