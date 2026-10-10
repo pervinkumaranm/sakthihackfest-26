@@ -406,49 +406,29 @@ export default async function handler(req: any, res: any) {
 
           nextState.configuredDurationSeconds = duration;
           nextState.totalDurationSeconds = duration;
+          nextState.remainingSeconds = duration;
+          nextState.targetEndTime = null;
+          nextState.status = 'STOPPED';
+          nextState.startedAt = null;
+          nextState.pausedAt = null;
+          nextState.stoppedAt = null;
 
-          // If currently STOPPED (or at ready initial state), update remaining to configured
-          if (nextState.status === 'STOPPED' || nextState.status === 'ENDED') {
-            nextState.remainingSeconds = duration;
-            nextState.targetEndTime = null;
-          }
-
-          console.log(`[TimerAPI] Admin ${adminUser} configured duration to ${duration}s (${Math.round(duration / 3600)}h).`);
+          console.log(`[TimerAPI] Admin ${adminUser} configured duration to ${duration}s (${(duration / 3600).toFixed(1)}h) in Supabase.`);
           break;
         }
 
         // ── 2. START TIMER ──────────────────────────────────────────────────
         case 'start': {
-          if (nextState.status === 'RUNNING') {
-            return res.status(400).json({
-              success: false,
-              error: 'Timer is already running.',
-              state: nextState,
-            });
-          }
-
-          // Determine start duration
-          let duration = Number(body.durationSeconds);
-          if (!duration || duration <= 0) {
-            // If timer was stopped or paused mid-run, resume remaining; otherwise use configured duration
-            if (nextState.remainingSeconds > 0 && nextState.status === 'PAUSED') {
-              duration = nextState.remainingSeconds;
-            } else if (nextState.status === 'STOPPED' && nextState.remainingSeconds > 0 && nextState.remainingSeconds !== nextState.configuredDurationSeconds && body.resumeIfStopped) {
-              duration = nextState.remainingSeconds;
-            } else {
-              duration = nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
-            }
-          } else {
-            // New duration specified explicitly for this run
-            nextState.configuredDurationSeconds = duration;
-            nextState.totalDurationSeconds = duration;
-          }
-
+          // Determine duration: explicitly passed duration or persisted configured duration
+          const duration = Number(body.durationSeconds) || nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
           const targetEndTime = now + duration * 1000;
+
+          nextState.configuredDurationSeconds = duration;
+          nextState.totalDurationSeconds = duration;
+          nextState.remainingSeconds = duration;
           nextState.status = 'RUNNING';
           nextState.startedAt = now;
           nextState.targetEndTime = targetEndTime;
-          nextState.remainingSeconds = duration;
           nextState.pausedAt = null;
           nextState.stoppedAt = null;
 
@@ -456,7 +436,25 @@ export default async function handler(req: any, res: any) {
             nextState.announcement = String(body.announcement);
           }
 
-          console.log(`[TimerAPI] Admin ${adminUser} started timer for ${duration}s. Deadline: ${new Date(targetEndTime).toISOString()}`);
+          console.log(`[TimerAPI] Admin ${adminUser} started timer for ${duration}s (${(duration / 3600).toFixed(1)}h). Deadline: ${new Date(targetEndTime).toISOString()}`);
+          break;
+        }
+
+        // ── 2B. RESTART TIMER (Clean restart from configured duration) ───────
+        case 'restart': {
+          const duration = Number(body.durationSeconds) || nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
+          const targetEndTime = now + duration * 1000;
+
+          nextState.configuredDurationSeconds = duration;
+          nextState.totalDurationSeconds = duration;
+          nextState.remainingSeconds = duration;
+          nextState.status = 'RUNNING';
+          nextState.startedAt = now;
+          nextState.targetEndTime = targetEndTime;
+          nextState.pausedAt = null;
+          nextState.stoppedAt = null;
+
+          console.log(`[TimerAPI] Admin ${adminUser} RESTARTED timer cleanly for ${duration}s (${(duration / 3600).toFixed(1)}h).`);
           break;
         }
 
@@ -465,6 +463,8 @@ export default async function handler(req: any, res: any) {
           // Freeze remaining time at the exact moment of stopping
           if (nextState.status === 'RUNNING' && nextState.targetEndTime) {
             nextState.remainingSeconds = Math.max(0, Math.round((nextState.targetEndTime - now) / 1000));
+          } else if (!nextState.remainingSeconds || nextState.remainingSeconds <= 0) {
+            nextState.remainingSeconds = nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS;
           }
 
           nextState.status = 'STOPPED';
@@ -499,7 +499,9 @@ export default async function handler(req: any, res: any) {
             });
           }
 
-          const remaining = nextState.remainingSeconds > 0 ? nextState.remainingSeconds : nextState.configuredDurationSeconds;
+          const remaining = (nextState.remainingSeconds && nextState.remainingSeconds > 0)
+            ? nextState.remainingSeconds
+            : (nextState.configuredDurationSeconds || DEFAULT_DURATION_SECONDS);
           const targetEndTime = now + remaining * 1000;
 
           nextState.status = 'RUNNING';
@@ -524,7 +526,7 @@ export default async function handler(req: any, res: any) {
           nextState.pausedAt = null;
           nextState.stoppedAt = null;
 
-          console.log(`[TimerAPI] Admin ${adminUser} reset timer to ready state (${duration}s).`);
+          console.log(`[TimerAPI] Admin ${adminUser} reset timer to ready state (${duration}s / ${(duration / 3600).toFixed(1)}h).`);
           break;
         }
 

@@ -259,6 +259,13 @@ class TimerService {
   }
 
   /**
+   * Restarts the timer cleanly from the configured duration.
+   */
+  public async restartTimer(durationSeconds?: number, announcement?: string) {
+    return this.dispatchAction('restart', { durationSeconds, announcement })
+  }
+
+  /**
    * Explicitly stops the timer and persists STOPPED status with current remaining time.
    */
   public async stopTimer() {

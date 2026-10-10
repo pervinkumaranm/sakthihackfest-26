@@ -161,6 +161,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // ── LIVE STAGE TIMER CONTROLLER STATE ────────────────────────────────────
   const [timerState, setTimerState] = useState<HackathonTimerState>(() => timerService.getState())
+  const [isEditingDuration, setIsEditingDuration] = useState<boolean>(false)
   const [timerPresetHours, setTimerPresetHours] = useState<number>(() => {
     const s = timerService.getState()
     return Math.floor((s.configuredDurationSeconds || 86400) / 3600)
@@ -189,15 +190,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   }, [])
 
-  // Synchronize configured duration into inputs when updated from database
+  // Synchronize configured duration into inputs when updated from database (only when not actively editing)
   useEffect(() => {
-    if (timerState.configuredDurationSeconds) {
+    if (!isEditingDuration && timerState.configuredDurationSeconds) {
       const hrs = Math.floor(timerState.configuredDurationSeconds / 3600)
       const mins = Math.floor((timerState.configuredDurationSeconds % 3600) / 60)
       setTimerPresetHours(hrs)
       setTimerCustomMins(mins)
     }
-  }, [timerState.configuredDurationSeconds])
+  }, [timerState.configuredDurationSeconds, isEditingDuration])
 
   // Live timer tick for accurate UI display
   const [timerDisplay, setTimerDisplay] = useState({
@@ -241,6 +242,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // Timer Controller Actions
   const handleConfigureDuration = async (hours = timerPresetHours, mins = timerCustomMins) => {
+    setIsEditingDuration(false)
     const totalSec = (hours * 3600) + (mins * 60)
     if (totalSec <= 0) {
       setActionFeedback({ type: 'error', message: 'Duration must be greater than 0.' })
@@ -248,13 +250,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
     const res = await timerService.configureDuration(totalSec)
     if (res.success) {
-      setActionFeedback({ type: 'success', message: `Configured duration saved: ${hours}h ${mins ? mins + 'm' : ''}.` })
+      setActionFeedback({ type: 'success', message: `Configured duration saved: ${hours}h ${mins ? mins + 'm' : ''} (saved in Supabase).` })
     } else {
       setActionFeedback({ type: 'error', message: res.error || 'Failed to save configured duration.' })
     }
   }
 
   const handleStartTimer = async (hours?: number, mins?: number) => {
+    setIsEditingDuration(false)
     const totalSec = ((hours ?? timerPresetHours) * 3600) + ((mins ?? timerCustomMins) * 60)
     if (timerState.status === 'PAUSED') {
       const res = await timerService.resumeTimer()
@@ -266,10 +269,23 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     } else {
       const res = await timerService.startTimer(totalSec)
       if (res.success) {
-        setActionFeedback({ type: 'success', message: `Stage timer started for ${Math.round(totalSec / 3600)} hours.` })
+        const h = Math.floor(totalSec / 3600)
+        const m = Math.floor((totalSec % 3600) / 60)
+        setActionFeedback({ type: 'success', message: `Stage timer started exactly for ${h}h ${m ? m + 'm' : ''}.` })
       } else {
         setActionFeedback({ type: 'error', message: res.error || 'Failed to start timer.' })
       }
+    }
+  }
+
+  const handleRestartTimer = async () => {
+    setIsEditingDuration(false)
+    const totalSec = (timerPresetHours * 3600) + (timerCustomMins * 60)
+    const res = await timerService.restartTimer(totalSec)
+    if (res.success) {
+      setActionFeedback({ type: 'success', message: `Stage timer restarted fresh from configured ${timerPresetHours}h ${timerCustomMins ? timerCustomMins + 'm' : ''}!` })
+    } else {
+      setActionFeedback({ type: 'error', message: res.error || 'Failed to restart timer.' })
     }
   }
 
@@ -311,10 +327,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }
 
   const handleResetTimer = async (hours = timerPresetHours) => {
+    setIsEditingDuration(false)
     const totalSec = (hours * 3600) + (timerCustomMins * 60)
     const res = await timerService.resetTimer(totalSec)
     if (res.success) {
-      setActionFeedback({ type: 'success', message: 'Stage timer reset to ready state.' })
+      setActionFeedback({ type: 'success', message: `Stage timer reset to configured ${hours}h ${timerCustomMins ? timerCustomMins + 'm' : ''}.` })
     } else {
       setActionFeedback({ type: 'error', message: res.error || 'Failed to reset timer.' })
     }
@@ -2139,8 +2156,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </div>
               </div>
 
-              {/* Primary Large Controls (Start / Pause / Stop / Reset / End) */}
-              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 pt-2 border-t border-brand-border/60">
+              {/* Primary Large Controls (Start / Pause / Stop / Restart / Reset / End) */}
+              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 pt-2 border-t border-brand-border/60">
                 {/* 1. START / RESUME */}
                 {timerState.status === 'RUNNING' ? (
                   <button
@@ -2188,7 +2205,17 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   <span>STOP TIMER</span>
                 </button>
 
-                {/* 4. RESET */}
+                {/* 4. RESTART (Starts fresh from configured time) */}
+                <button
+                  onClick={handleRestartTimer}
+                  className="py-4 px-3 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/40 transition-all active:scale-95"
+                  title="Restarts timer immediately from the configured duration"
+                >
+                  <RefreshCw size={20} />
+                  <span>RESTART TIMER</span>
+                </button>
+
+                {/* 5. RESET (Resets to configured time in stopped state) */}
                 <button
                   onClick={() => handleResetTimer()}
                   className="py-4 px-3 rounded-2xl bg-brand-surface hover:bg-brand-card border border-brand-border text-brand-muted hover:text-white font-mono font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95"
@@ -2197,7 +2224,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   <span>RESET TIMER</span>
                 </button>
 
-                {/* 5. END / FREEZE */}
+                {/* 6. END / FREEZE */}
                 <button
                   onClick={() => setConfirmEndOpen(true)}
                   disabled={timerState.status === 'ENDED'}
@@ -2264,17 +2291,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { label: '24 Hours', hours: 24, tag: 'Full Hackathon' },
+                    { label: '15 Hours', hours: 15, tag: 'Sprint' },
                     { label: '12 Hours', hours: 12, tag: 'Checkpoint 1' },
                     { label: '8 Hours', hours: 8, tag: 'Night Sprint' },
                     { label: '4 Hours', hours: 4, tag: 'Final Lap' },
                     { label: '2 Hours', hours: 2, tag: 'Pitch Prep' },
                     { label: '1 Hour', hours: 1, tag: 'Last Hour' },
                     { label: '30 Mins', hours: 0.5, tag: 'Freeze Alert' },
-                    { label: '15 Mins', hours: 0.25, tag: 'Demo Round' },
                   ].map(p => (
                     <button
                       key={p.label}
                       onClick={() => {
+                        setIsEditingDuration(false)
                         setTimerPresetHours(p.hours)
                         setTimerCustomMins(0)
                         handleConfigureDuration(p.hours, 0)
@@ -2301,7 +2329,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         min={0}
                         max={72}
                         value={timerPresetHours}
-                        onChange={e => setTimerPresetHours(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        onFocus={() => setIsEditingDuration(true)}
+                        onChange={e => {
+                          setIsEditingDuration(true)
+                          setTimerPresetHours(Math.max(0, parseInt(e.target.value, 10) || 0))
+                        }}
                         className="w-full bg-brand-card border border-brand-border rounded-xl text-white text-xs p-2.5 font-mono focus:outline-none focus:border-brand-primary"
                       />
                     </div>
@@ -2312,7 +2344,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         min={0}
                         max={59}
                         value={timerCustomMins}
-                        onChange={e => setTimerCustomMins(Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                        onFocus={() => setIsEditingDuration(true)}
+                        onChange={e => {
+                          setIsEditingDuration(true)
+                          setTimerCustomMins(Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))
+                        }}
                         className="w-full bg-brand-card border border-brand-border rounded-xl text-white text-xs p-2.5 font-mono focus:outline-none focus:border-brand-primary"
                       />
                     </div>
