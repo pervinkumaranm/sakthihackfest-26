@@ -16,6 +16,7 @@
  * - Real-time Payment Status Verification & Rejection
  * - Real-time Registration Deletion with Confirmation
  * - Audit Trail Logging
+ * - test command for deployment
  */
 
 import crypto from 'node:crypto';
@@ -84,7 +85,7 @@ function loadLocalEnvIfNeeded() {
         }
       });
     }
-  } catch {}
+  } catch { }
 }
 
 function getAdminCredentials() {
@@ -257,75 +258,75 @@ export default async function handler(req: any, res: any) {
     }
     body = body || {};
 
-  const action = body.action;
+    const action = body.action;
 
-  // 1. Admin Login
-  if (action === 'login') {
-    const username = String(body.username || '').trim();
-    const password = String(body.password || '').trim();
-    const creds = getAdminCredentials();
+    // 1. Admin Login
+    if (action === 'login') {
+      const username = String(body.username || '').trim();
+      const password = String(body.password || '').trim();
+      const creds = getAdminCredentials();
 
-    if (!username || !password) {
-      return send(400, { success: false, error: 'Username and password are required' });
+      if (!username || !password) {
+        return send(400, { success: false, error: 'Username and password are required' });
+      }
+
+      const isPrimaryMatch =
+        username.toLowerCase() === creds.username.toLowerCase() && password === creds.password;
+      const isFallbackMatch =
+        username.toLowerCase() === creds.fallbackUsername.toLowerCase() && password === creds.fallbackPassword;
+
+      if (isPrimaryMatch || isFallbackMatch) {
+        const { token, expiresAt } = generateAdminToken(username);
+        await recordAuditLog('ADMIN_LOGIN', username, username, { role: 'ADMIN' });
+        return send(200, {
+          success: true,
+          token,
+          expiresAt,
+          user: { username, role: 'ADMIN' },
+        });
+      }
+
+      return send(401, { success: false, error: 'Invalid administrator credentials' });
     }
 
-    const isPrimaryMatch =
-      username.toLowerCase() === creds.username.toLowerCase() && password === creds.password;
-    const isFallbackMatch =
-      username.toLowerCase() === creds.fallbackUsername.toLowerCase() && password === creds.fallbackPassword;
+    // Verify Session Token for all subsequent actions
+    const token = extractToken(req) || body.token;
+    const session = verifyAdminToken(token);
 
-    if (isPrimaryMatch || isFallbackMatch) {
-      const { token, expiresAt } = generateAdminToken(username);
-      await recordAuditLog('ADMIN_LOGIN', username, username, { role: 'ADMIN' });
-      return send(200, {
-        success: true,
-        token,
-        expiresAt,
-        user: { username, role: 'ADMIN' },
+    if (!session.valid) {
+      return send(401, {
+        success: false,
+        error: 'Unauthorized or expired session. Please login again.',
       });
     }
 
-    return send(401, { success: false, error: 'Invalid administrator credentials' });
-  }
+    const activeUser = session.username || 'admin';
 
-  // Verify Session Token for all subsequent actions
-  const token = extractToken(req) || body.token;
-  const session = verifyAdminToken(token);
+    // 2. Verify Session
+    if (action === 'verify_session') {
+      return send(200, {
+        success: true,
+        valid: true,
+        user: { username: activeUser, role: 'ADMIN' },
+      });
+    }
 
-  if (!session.valid) {
-    return send(401, {
-      success: false,
-      error: 'Unauthorized or expired session. Please login again.',
-    });
-  }
+    // 3. Resend Confirmation Email
+    if (action === 'resend_email') {
+      const regId = String(body.registrationId || '').trim();
+      return send(200, {
+        success: true,
+        message: `Registration ${regId} details confirmed. Automated emails are disabled; registration passes are accessible directly from the portal.`,
+      });
+    }
 
-  const activeUser = session.username || 'admin';
-
-  // 2. Verify Session
-  if (action === 'verify_session') {
-    return send(200, {
-      success: true,
-      valid: true,
-      user: { username: activeUser, role: 'ADMIN' },
-    });
-  }
-
-  // 3. Resend Confirmation Email
-  if (action === 'resend_email') {
-    const regId = String(body.registrationId || '').trim();
-    return send(200, {
-      success: true,
-      message: `Registration ${regId} details confirmed. Automated emails are disabled; registration passes are accessible directly from the portal.`,
-    });
-  }
-
-  // 4. Get All Registrations & Compute Stats
-  if (action === 'get_registrations') {
-    try {
-      const supabase = getSupabase();
-      const { data: teams, error } = await supabase
-        .from('teams')
-        .select(`
+    // 4. Get All Registrations & Compute Stats
+    if (action === 'get_registrations') {
+      try {
+        const supabase = getSupabase();
+        const { data: teams, error } = await supabase
+          .from('teams')
+          .select(`
           id,
           team_code,
           team_name,
@@ -361,304 +362,304 @@ export default async function handler(req: any, res: any) {
             is_leader
           )
         `)
-        .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        return send(500, { success: false, error: error.message });
-      }
-
-      const registrations = (teams || []).map(normalizeTeamToRegistration);
-
-      const stats = {
-        totalRegistrations: registrations.length,
-        confirmedRegistrations: registrations.filter(r => r.registrationStatus === 'CONFIRMED').length,
-        verifiedPayments: registrations.filter(r => r.paymentStatus === 'VERIFIED').length,
-        pendingVerification: registrations.filter(r => r.paymentStatus === 'PENDING').length,
-        rejectedRegistrations: registrations.filter(r => r.paymentStatus === 'REJECTED' || r.registrationStatus === 'REJECTED').length,
-        totalAmountCollected: registrations
-          .filter(r => r.paymentStatus === 'VERIFIED')
-          .reduce((sum, r) => sum + (r.paymentAmount || 1000), 0),
-        accommodationRequests: registrations.filter(r => r.accommodationRequired === 'Yes').length,
-        domainCounts: registrations.reduce((acc: any, r) => {
-          const d = r.selectedDomain || 'Unspecified';
-          acc[d] = (acc[d] || 0) + 1;
-          return acc;
-        }, {}),
-        themeCounts: registrations.reduce((acc: any, r) => {
-          const t = r.selectedTheme || 'General Track';
-          acc[t] = (acc[t] || 0) + 1;
-          return acc;
-        }, {}),
-      };
-
-      return send(200, {
-        success: true,
-        data: registrations,
-        stats,
-      });
-    } catch (err: any) {
-      return send(500, { success: false, error: err.message });
-    }
-  }
-
-  // 5. Get Single Registration
-  if (action === 'get_registration') {
-    const regId = String(body.registrationId || body.id || '').trim().toUpperCase();
-    if (!regId) {
-      return send(400, { success: false, error: 'Registration ID is required' });
-    }
-
-    try {
-      const supabase = getSupabase();
-      const { data: team, error } = await supabase
-        .from('teams')
-        .select(`
-          id,
-          team_code,
-          team_name,
-          team_size,
-          selected_domain,
-          selected_theme,
-          accommodation_required,
-          leader_name,
-          leader_college,
-          leader_department,
-          leader_year,
-          leader_whatsapp,
-          leader_email,
-          payment_amount,
-          upi_transaction_id,
-          payment_screenshot_url,
-          payment_status,
-          registration_status,
-          email_status,
-          email_sent_at,
-          registration_timestamp,
-          created_at,
-          updated_at,
-          team_members (
-            id,
-            member_order,
-            name,
-            college,
-            department,
-            year_of_study,
-            whatsapp,
-            email,
-            is_leader
-          )
-        `)
-        .eq('team_code', regId)
-        .maybeSingle();
-
-      if (error || !team) {
-        return send(404, { success: false, error: `Registration "${regId}" not found` });
-      }
-
-      return send(200, { success: true, data: normalizeTeamToRegistration(team) });
-    } catch (err: any) {
-      return send(500, { success: false, error: err.message });
-    }
-  }
-
-  // 6. Update Registration Details
-  if (action === 'update_registration') {
-    const regId = String(body.registrationId || '').trim().toUpperCase();
-    const updates = body.updates || {};
-
-    if (!regId) {
-      return send(400, { success: false, error: 'Registration ID is required' });
-    }
-
-    try {
-      const supabase = getSupabase();
-      const now = new Date().toISOString();
-
-      // Look up existing team
-      const { data: team, error: findErr } = await supabase
-        .from('teams')
-        .select('id, team_code')
-        .eq('team_code', regId)
-        .maybeSingle();
-
-      if (findErr || !team) {
-        return send(404, { success: false, error: `Registration "${regId}" not found` });
-      }
-
-      const teamUpdates: any = { updated_at: now };
-      if (updates.teamName) teamUpdates.team_name = String(updates.teamName).trim();
-      if (updates.teamSize) teamUpdates.team_size = parseInt(updates.teamSize, 10);
-      if (updates.selectedDomain) teamUpdates.selected_domain = String(updates.selectedDomain).trim();
-      if (updates.selectedTheme) teamUpdates.selected_theme = String(updates.selectedTheme).trim();
-      if (updates.accommodationRequired !== undefined) {
-        teamUpdates.accommodation_required = updates.accommodationRequired === 'Yes';
-      }
-      if (updates.leaderName) teamUpdates.leader_name = String(updates.leaderName).trim();
-      if (updates.leaderCollege) teamUpdates.leader_college = String(updates.leaderCollege).trim();
-      if (updates.leaderDepartment !== undefined) teamUpdates.leader_department = String(updates.leaderDepartment).trim();
-      if (updates.leaderYear !== undefined) teamUpdates.leader_year = String(updates.leaderYear).trim();
-      if (updates.leaderWhatsapp !== undefined) teamUpdates.leader_whatsapp = String(updates.leaderWhatsapp).trim();
-      if (updates.leaderEmail) teamUpdates.leader_email = String(updates.leaderEmail).trim().toLowerCase();
-      if (updates.upiTransactionId !== undefined) teamUpdates.upi_transaction_id = String(updates.upiTransactionId).trim();
-      if (updates.paymentStatus) teamUpdates.payment_status = String(updates.paymentStatus).toUpperCase();
-      if (updates.registrationStatus) teamUpdates.registration_status = String(updates.registrationStatus).toUpperCase();
-
-      await supabase.from('teams').update(teamUpdates).eq('id', team.id);
-
-      // Update team leader member row
-      if (updates.leaderName || updates.leaderCollege) {
-        await supabase
-          .from('team_members')
-          .update({
-            name: updates.leaderName || undefined,
-            college: updates.leaderCollege || undefined,
-            department: updates.leaderDepartment || undefined,
-            year_of_study: updates.leaderYear || undefined,
-            whatsapp: updates.leaderWhatsapp || undefined,
-            email: updates.leaderEmail || undefined,
-          })
-          .eq('team_id', team.id)
-          .eq('is_leader', true);
-      }
-
-      // If members array provided, update non-leader members
-      if (Array.isArray(updates.members)) {
-        // Delete existing non-leader members
-        await supabase.from('team_members').delete().eq('team_id', team.id).eq('is_leader', false);
-
-        const newMembers = updates.members.map((m: any, idx: number) => ({
-          team_id: team.id,
-          member_order: idx + 2,
-          name: m.name,
-          college: m.college || updates.leaderCollege || 'N/A',
-          department: m.department || '',
-          year_of_study: m.yearOfStudy || m.year || '',
-          whatsapp: m.whatsapp || '',
-          email: m.email || '',
-          is_leader: false,
-          created_at: now,
-        }));
-
-        if (newMembers.length > 0) {
-          await supabase.from('team_members').insert(newMembers);
+        if (error) {
+          return send(500, { success: false, error: error.message });
         }
+
+        const registrations = (teams || []).map(normalizeTeamToRegistration);
+
+        const stats = {
+          totalRegistrations: registrations.length,
+          confirmedRegistrations: registrations.filter(r => r.registrationStatus === 'CONFIRMED').length,
+          verifiedPayments: registrations.filter(r => r.paymentStatus === 'VERIFIED').length,
+          pendingVerification: registrations.filter(r => r.paymentStatus === 'PENDING').length,
+          rejectedRegistrations: registrations.filter(r => r.paymentStatus === 'REJECTED' || r.registrationStatus === 'REJECTED').length,
+          totalAmountCollected: registrations
+            .filter(r => r.paymentStatus === 'VERIFIED')
+            .reduce((sum, r) => sum + (r.paymentAmount || 1000), 0),
+          accommodationRequests: registrations.filter(r => r.accommodationRequired === 'Yes').length,
+          domainCounts: registrations.reduce((acc: any, r) => {
+            const d = r.selectedDomain || 'Unspecified';
+            acc[d] = (acc[d] || 0) + 1;
+            return acc;
+          }, {}),
+          themeCounts: registrations.reduce((acc: any, r) => {
+            const t = r.selectedTheme || 'General Track';
+            acc[t] = (acc[t] || 0) + 1;
+            return acc;
+          }, {}),
+        };
+
+        return send(200, {
+          success: true,
+          data: registrations,
+          stats,
+        });
+      } catch (err: any) {
+        return send(500, { success: false, error: err.message });
+      }
+    }
+
+    // 5. Get Single Registration
+    if (action === 'get_registration') {
+      const regId = String(body.registrationId || body.id || '').trim().toUpperCase();
+      if (!regId) {
+        return send(400, { success: false, error: 'Registration ID is required' });
       }
 
-      await recordAuditLog('REGISTRATION_UPDATED', activeUser, regId, updates);
+      try {
+        const supabase = getSupabase();
+        const { data: team, error } = await supabase
+          .from('teams')
+          .select(`
+          id,
+          team_code,
+          team_name,
+          team_size,
+          selected_domain,
+          selected_theme,
+          accommodation_required,
+          leader_name,
+          leader_college,
+          leader_department,
+          leader_year,
+          leader_whatsapp,
+          leader_email,
+          payment_amount,
+          upi_transaction_id,
+          payment_screenshot_url,
+          payment_status,
+          registration_status,
+          email_status,
+          email_sent_at,
+          registration_timestamp,
+          created_at,
+          updated_at,
+          team_members (
+            id,
+            member_order,
+            name,
+            college,
+            department,
+            year_of_study,
+            whatsapp,
+            email,
+            is_leader
+          )
+        `)
+          .eq('team_code', regId)
+          .maybeSingle();
 
-      // Fetch fresh record
-      const { data: updatedTeam } = await supabase
-        .from('teams')
-        .select(`
+        if (error || !team) {
+          return send(404, { success: false, error: `Registration "${regId}" not found` });
+        }
+
+        return send(200, { success: true, data: normalizeTeamToRegistration(team) });
+      } catch (err: any) {
+        return send(500, { success: false, error: err.message });
+      }
+    }
+
+    // 6. Update Registration Details
+    if (action === 'update_registration') {
+      const regId = String(body.registrationId || '').trim().toUpperCase();
+      const updates = body.updates || {};
+
+      if (!regId) {
+        return send(400, { success: false, error: 'Registration ID is required' });
+      }
+
+      try {
+        const supabase = getSupabase();
+        const now = new Date().toISOString();
+
+        // Look up existing team
+        const { data: team, error: findErr } = await supabase
+          .from('teams')
+          .select('id, team_code')
+          .eq('team_code', regId)
+          .maybeSingle();
+
+        if (findErr || !team) {
+          return send(404, { success: false, error: `Registration "${regId}" not found` });
+        }
+
+        const teamUpdates: any = { updated_at: now };
+        if (updates.teamName) teamUpdates.team_name = String(updates.teamName).trim();
+        if (updates.teamSize) teamUpdates.team_size = parseInt(updates.teamSize, 10);
+        if (updates.selectedDomain) teamUpdates.selected_domain = String(updates.selectedDomain).trim();
+        if (updates.selectedTheme) teamUpdates.selected_theme = String(updates.selectedTheme).trim();
+        if (updates.accommodationRequired !== undefined) {
+          teamUpdates.accommodation_required = updates.accommodationRequired === 'Yes';
+        }
+        if (updates.leaderName) teamUpdates.leader_name = String(updates.leaderName).trim();
+        if (updates.leaderCollege) teamUpdates.leader_college = String(updates.leaderCollege).trim();
+        if (updates.leaderDepartment !== undefined) teamUpdates.leader_department = String(updates.leaderDepartment).trim();
+        if (updates.leaderYear !== undefined) teamUpdates.leader_year = String(updates.leaderYear).trim();
+        if (updates.leaderWhatsapp !== undefined) teamUpdates.leader_whatsapp = String(updates.leaderWhatsapp).trim();
+        if (updates.leaderEmail) teamUpdates.leader_email = String(updates.leaderEmail).trim().toLowerCase();
+        if (updates.upiTransactionId !== undefined) teamUpdates.upi_transaction_id = String(updates.upiTransactionId).trim();
+        if (updates.paymentStatus) teamUpdates.payment_status = String(updates.paymentStatus).toUpperCase();
+        if (updates.registrationStatus) teamUpdates.registration_status = String(updates.registrationStatus).toUpperCase();
+
+        await supabase.from('teams').update(teamUpdates).eq('id', team.id);
+
+        // Update team leader member row
+        if (updates.leaderName || updates.leaderCollege) {
+          await supabase
+            .from('team_members')
+            .update({
+              name: updates.leaderName || undefined,
+              college: updates.leaderCollege || undefined,
+              department: updates.leaderDepartment || undefined,
+              year_of_study: updates.leaderYear || undefined,
+              whatsapp: updates.leaderWhatsapp || undefined,
+              email: updates.leaderEmail || undefined,
+            })
+            .eq('team_id', team.id)
+            .eq('is_leader', true);
+        }
+
+        // If members array provided, update non-leader members
+        if (Array.isArray(updates.members)) {
+          // Delete existing non-leader members
+          await supabase.from('team_members').delete().eq('team_id', team.id).eq('is_leader', false);
+
+          const newMembers = updates.members.map((m: any, idx: number) => ({
+            team_id: team.id,
+            member_order: idx + 2,
+            name: m.name,
+            college: m.college || updates.leaderCollege || 'N/A',
+            department: m.department || '',
+            year_of_study: m.yearOfStudy || m.year || '',
+            whatsapp: m.whatsapp || '',
+            email: m.email || '',
+            is_leader: false,
+            created_at: now,
+          }));
+
+          if (newMembers.length > 0) {
+            await supabase.from('team_members').insert(newMembers);
+          }
+        }
+
+        await recordAuditLog('REGISTRATION_UPDATED', activeUser, regId, updates);
+
+        // Fetch fresh record
+        const { data: updatedTeam } = await supabase
+          .from('teams')
+          .select(`
           *,
           team_members (*)
         `)
-        .eq('id', team.id)
-        .single();
+          .eq('id', team.id)
+          .single();
 
-      return send(200, {
-        success: true,
-        message: `Registration "${regId}" updated successfully.`,
-        data: normalizeTeamToRegistration(updatedTeam),
-      });
-    } catch (err: any) {
-      return send(500, { success: false, error: err.message });
-    }
-  }
-
-  // 7. Verify Payment Status
-  if (action === 'verify_payment') {
-    const regId = String(body.registrationId || '').trim().toUpperCase();
-    const cleanStatus = String(body.paymentStatus || '').toUpperCase();
-    const notes = String(body.rejectionReason || body.notes || '').trim();
-
-    if (!regId || !['VERIFIED', 'PENDING', 'REJECTED'].includes(cleanStatus)) {
-      return send(400, {
-        success: false,
-        error: 'Registration ID and valid payment status (VERIFIED | PENDING | REJECTED) are required',
-      });
+        return send(200, {
+          success: true,
+          message: `Registration "${regId}" updated successfully.`,
+          data: normalizeTeamToRegistration(updatedTeam),
+        });
+      } catch (err: any) {
+        return send(500, { success: false, error: err.message });
+      }
     }
 
-    try {
-      const supabase = getSupabase();
-      const now = new Date().toISOString();
+    // 7. Verify Payment Status
+    if (action === 'verify_payment') {
+      const regId = String(body.registrationId || '').trim().toUpperCase();
+      const cleanStatus = String(body.paymentStatus || '').toUpperCase();
+      const notes = String(body.rejectionReason || body.notes || '').trim();
 
-      const { data: team, error: findErr } = await supabase
-        .from('teams')
-        .select('id, team_code, leader_name, leader_email')
-        .eq('team_code', regId)
-        .maybeSingle();
-
-      if (findErr || !team) {
-        return send(404, { success: false, error: `Registration "${regId}" not found` });
+      if (!regId || !['VERIFIED', 'PENDING', 'REJECTED'].includes(cleanStatus)) {
+        return send(400, {
+          success: false,
+          error: 'Registration ID and valid payment status (VERIFIED | PENDING | REJECTED) are required',
+        });
       }
 
-      const regStatus = cleanStatus === 'REJECTED' ? 'REJECTED' : 'CONFIRMED';
-      await supabase
-        .from('teams')
-        .update({
-          payment_status: cleanStatus,
-          registration_status: regStatus,
-          updated_at: now,
-        })
-        .eq('id', team.id);
+      try {
+        const supabase = getSupabase();
+        const now = new Date().toISOString();
 
-      await recordAuditLog(
-        cleanStatus === 'VERIFIED' ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
-        activeUser,
-        regId,
-        { paymentStatus: cleanStatus, notes }
-      );
+        const { data: team, error: findErr } = await supabase
+          .from('teams')
+          .select('id, team_code, leader_name, leader_email')
+          .eq('team_code', regId)
+          .maybeSingle();
 
-      // Fetch updated record
-      const { data: updatedTeam } = await supabase
-        .from('teams')
-        .select(`*, team_members (*)`)
-        .eq('id', team.id)
-        .single();
+        if (findErr || !team) {
+          return send(404, { success: false, error: `Registration "${regId}" not found` });
+        }
 
-      return send(200, {
-        success: true,
-        message: `Payment status for "${regId}" updated to ${cleanStatus}.`,
-        data: normalizeTeamToRegistration(updatedTeam),
-      });
-    } catch (err: any) {
-      return send(500, { success: false, error: err.message });
+        const regStatus = cleanStatus === 'REJECTED' ? 'REJECTED' : 'CONFIRMED';
+        await supabase
+          .from('teams')
+          .update({
+            payment_status: cleanStatus,
+            registration_status: regStatus,
+            updated_at: now,
+          })
+          .eq('id', team.id);
+
+        await recordAuditLog(
+          cleanStatus === 'VERIFIED' ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
+          activeUser,
+          regId,
+          { paymentStatus: cleanStatus, notes }
+        );
+
+        // Fetch updated record
+        const { data: updatedTeam } = await supabase
+          .from('teams')
+          .select(`*, team_members (*)`)
+          .eq('id', team.id)
+          .single();
+
+        return send(200, {
+          success: true,
+          message: `Payment status for "${regId}" updated to ${cleanStatus}.`,
+          data: normalizeTeamToRegistration(updatedTeam),
+        });
+      } catch (err: any) {
+        return send(500, { success: false, error: err.message });
+      }
     }
-  }
 
-  // 8. Delete Registration
-  if (action === 'delete_registration') {
-    const regId = String(body.registrationId || '').trim().toUpperCase();
-    if (!regId) {
-      return send(400, { success: false, error: 'Registration ID is required' });
-    }
-
-    try {
-      const supabase = getSupabase();
-      const { data: team, error: findErr } = await supabase
-        .from('teams')
-        .select('id, team_code')
-        .eq('team_code', regId)
-        .maybeSingle();
-
-      if (findErr || !team) {
-        return send(404, { success: false, error: `Registration "${regId}" not found` });
+    // 8. Delete Registration
+    if (action === 'delete_registration') {
+      const regId = String(body.registrationId || '').trim().toUpperCase();
+      if (!regId) {
+        return send(400, { success: false, error: 'Registration ID is required' });
       }
 
-      // Deleting team cascades to team_members, attendance_records, and attendance_members
-      await supabase.from('teams').delete().eq('id', team.id);
+      try {
+        const supabase = getSupabase();
+        const { data: team, error: findErr } = await supabase
+          .from('teams')
+          .select('id, team_code')
+          .eq('team_code', regId)
+          .maybeSingle();
 
-      await recordAuditLog('REGISTRATION_DELETED', activeUser, regId, { deletedAt: new Date().toISOString() });
+        if (findErr || !team) {
+          return send(404, { success: false, error: `Registration "${regId}" not found` });
+        }
 
-      return send(200, {
-        success: true,
-        message: `Registration "${regId}" was successfully deleted from Supabase database.`,
-      });
-    } catch (err: any) {
-      return send(500, { success: false, error: err.message });
+        // Deleting team cascades to team_members, attendance_records, and attendance_members
+        await supabase.from('teams').delete().eq('id', team.id);
+
+        await recordAuditLog('REGISTRATION_DELETED', activeUser, regId, { deletedAt: new Date().toISOString() });
+
+        return send(200, {
+          success: true,
+          message: `Registration "${regId}" was successfully deleted from Supabase database.`,
+        });
+      } catch (err: any) {
+        return send(500, { success: false, error: err.message });
+      }
     }
-  }
 
     return send(400, { success: false, error: `Unknown action: ${action}` });
   } catch (fatalErr: any) {
