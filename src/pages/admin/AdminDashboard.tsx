@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LogOut, Search, Download, Check, X, Eye, RefreshCw,
@@ -8,14 +8,14 @@ import {
   Building, Phone, Calendar, UserCheck, ShieldAlert, FileText, CheckSquare,
   Trophy, Medal, Award, Timer, Flame, GraduationCap, Star, Sparkles, TrendingUp, BarChart3,
   Play, Pause, Square, RotateCcw, Megaphone, MonitorPlay, Plus, Bell, Volume2, Tv, Radio, Crown,
-  QrCode, Sliders, BedDouble, ShieldCheck, Copy, CheckCircle2
+  QrCode, Sliders, BedDouble, ShieldCheck, Copy, CheckCircle2, MessageSquareHeart, User
 } from 'lucide-react'
 import { apiService } from '../../services/api'
 import { useAppSettings } from '../../context/SettingsContext'
 import ParticipantPass from '../../components/ParticipantPass'
 import { timerService, type HackathonTimerState } from '../../services/timerService'
 import { winnerService, type WinnerAnnouncementState, type WinnerTeamRecord } from '../../services/winnerService'
-import type { StoredRegistration, AdminStats, PaymentStatus, RegistrationStatus, StoredAccommodation, AccommodationStatus, AppSettings } from '../../types'
+import type { StoredRegistration, AdminStats, PaymentStatus, RegistrationStatus, StoredAccommodation, AccommodationStatus, AppSettings, StoredParticipantFeedback } from '../../types'
 import { HACKATHON_DOMAINS } from '../../../config/registrationSchema'
 import { eventConfig } from '../../../config/eventConfig'
 
@@ -23,7 +23,7 @@ interface AdminDashboardProps {
   onLogout?: () => void
 }
 
-type TabType = 'dashboard' | 'registrations' | 'payments' | 'accommodation' | 'leaderboard' | 'timer'
+type TabType = 'dashboard' | 'registrations' | 'payments' | 'accommodation' | 'leaderboard' | 'timer' | 'feedback'
 type LeaderboardView = 'announcement' | 'teams' | 'colleges' | 'domains'
 
 interface TeamEvaluation {
@@ -123,6 +123,105 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // Rejection Reason State
   const [rejectionReason, setRejectionReason] = useState('')
+
+  // ── PARTICIPANT FEEDBACK STATE & CONTROLLER ───────────────────────────────
+  const [feedbackTeams, setFeedbackTeams] = useState<string[]>([])
+  const [loadingFeedbackTeams, setLoadingFeedbackTeams] = useState(false)
+  const [feedbackTeamsError, setFeedbackTeamsError] = useState<string | null>(null)
+  const [selectedFeedbackTeam, setSelectedFeedbackTeam] = useState<string | null>(null)
+  const [feedbackTeamSearchTerm, setFeedbackTeamSearchTerm] = useState('')
+  const [feedbackSubmissions, setFeedbackSubmissions] = useState<StoredParticipantFeedback[]>([])
+  const [loadingFeedbackSubmissions, setLoadingFeedbackSubmissions] = useState(false)
+  const [feedbackSubmissionsError, setFeedbackSubmissionsError] = useState<string | null>(null)
+  const [viewingFeedbackSubmission, setViewingFeedbackSubmission] = useState<StoredParticipantFeedback | null>(null)
+  const currentFeedbackTeamRef = useRef<string | null>(null)
+
+  function formatFeedbackTimestamp(isoString?: string): string {
+    if (!isoString) return 'Not available'
+    try {
+      const d = new Date(isoString)
+      if (isNaN(d.getTime())) return isoString
+      return new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }).format(d)
+    } catch {
+      return isoString
+    }
+  }
+
+  const loadFeedbackTeams = async () => {
+    setLoadingFeedbackTeams(true)
+    setFeedbackTeamsError(null)
+    try {
+      const res = await apiService.getFeedbackTeams()
+      if (res.success && Array.isArray(res.data)) {
+        setFeedbackTeams(res.data)
+      } else {
+        setFeedbackTeamsError(res.error || 'Failed to retrieve feedback team names.')
+      }
+    } catch (err: any) {
+      setFeedbackTeamsError(err.message || 'Failed to retrieve feedback team names.')
+    } finally {
+      setLoadingFeedbackTeams(false)
+    }
+  }
+
+  const handleSelectFeedbackTeam = async (teamName: string) => {
+    if (!teamName) {
+      setSelectedFeedbackTeam(null)
+      currentFeedbackTeamRef.current = null
+      setFeedbackSubmissions([])
+      setFeedbackSubmissionsError(null)
+      return
+    }
+
+    setSelectedFeedbackTeam(teamName)
+    currentFeedbackTeamRef.current = teamName
+    setLoadingFeedbackSubmissions(true)
+    setFeedbackSubmissionsError(null)
+    setFeedbackSubmissions([])
+
+    try {
+      const res = await apiService.getFeedbackByTeam(teamName)
+      // Prevent stale response from overriding if user switched teams in-between
+      if (currentFeedbackTeamRef.current === teamName) {
+        if (res.success && Array.isArray(res.data)) {
+          setFeedbackSubmissions(res.data)
+        } else {
+          setFeedbackSubmissionsError(res.error || 'Failed to load feedback submissions for this team.')
+        }
+      }
+    } catch (err: any) {
+      if (currentFeedbackTeamRef.current === teamName) {
+        setFeedbackSubmissionsError(err.message || 'Failed to load feedback submissions for this team.')
+      }
+    } finally {
+      if (currentFeedbackTeamRef.current === teamName) {
+        setLoadingFeedbackSubmissions(false)
+      }
+    }
+  }
+
+  // Filter distinct team names by search query while preserving exact casing/spelling
+  const filteredFeedbackTeams = useMemo(() => {
+    if (!feedbackTeamSearchTerm.trim()) return feedbackTeams
+    const q = feedbackTeamSearchTerm.toLowerCase()
+    return feedbackTeams.filter(t => t.toLowerCase().includes(q))
+  }, [feedbackTeams, feedbackTeamSearchTerm])
+
+  // Lazy load feedback teams on demand ONLY when the admin opens the feedback section
+  useEffect(() => {
+    if (activeTab === 'feedback' && feedbackTeams.length === 0 && !loadingFeedbackTeams && !feedbackTeamsError) {
+      loadFeedbackTeams()
+    }
+  }, [activeTab, feedbackTeams.length, loadingFeedbackTeams, feedbackTeamsError])
 
   // ── LIVE TIMER & COUNTDOWN STATE ──────────────────────────────────────────
   const [countdown, setCountdown] = useState(() => calculateCountdown())
@@ -1049,20 +1148,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 DASHBOARD
               </button>
               <button
-                onClick={() => { setActiveTab('registrations'); setFilterPayment('ALL'); setFilterAccommodation('ALL'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'registrations' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                  }`}
-              >
-                REGISTRATIONS
-              </button>
-              <button
-                onClick={() => { setActiveTab('payments'); setFilterPayment('PENDING'); }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'payments' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
-                  }`}
-              >
-                PAYMENT STATUS
-              </button>
-              <button
                 onClick={() => { setActiveTab('accommodation'); }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'accommodation' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
                   }`}
@@ -1093,6 +1178,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 {timerState.status === 'RUNNING' && (
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping inline-block" />
                 )}
+              </button>
+              <button
+                onClick={() => { setActiveTab('feedback'); }}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'feedback' ? 'bg-brand-primary text-white shadow-glow-red' : 'text-brand-muted hover:text-white'
+                  }`}
+              >
+                <MessageSquareHeart size={13} className="text-pink-400" />
+                PARTICIPANT FEEDBACK
               </button>
             </nav>
 
@@ -1129,20 +1222,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               Dashboard
             </button>
             <button
-              onClick={() => { setActiveTab('registrations'); setFilterPayment('ALL'); setFilterAccommodation('ALL'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${activeTab === 'registrations' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-                }`}
-            >
-              Registrations
-            </button>
-            <button
-              onClick={() => { setActiveTab('payments'); setFilterPayment('PENDING'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium ${activeTab === 'payments' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
-                }`}
-            >
-              Payments
-            </button>
-            <button
               onClick={() => { setActiveTab('accommodation'); }}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${activeTab === 'accommodation' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
                 }`}
@@ -1171,6 +1250,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               {timerState.status === 'RUNNING' && (
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping inline-block" />
               )}
+            </button>
+            <button
+              onClick={() => { setActiveTab('feedback'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap font-medium flex items-center gap-1 ${activeTab === 'feedback' ? 'bg-brand-primary text-white' : 'bg-brand-card text-brand-muted'
+                }`}
+            >
+              <MessageSquareHeart size={12} className="text-pink-400" />
+              Participant Feedback
             </button>
           </div>
         </div>
@@ -2846,6 +2933,234 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </>
               )}
             </div>
+          </section>
+        ) : activeTab === 'feedback' ? (
+          /* ── VIEW: DEDICATED PARTICIPANT FEEDBACK TAB ─────────────────────── */
+          <section className="space-y-6">
+            {/* Top Info Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-brand-surface border border-brand-border p-5 rounded-2xl shadow-xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400">
+                    <MessageSquareHeart size={20} />
+                  </div>
+                  <div>
+                    <h2 className="font-display font-black text-xl text-white tracking-wide">
+                      PARTICIPANT FEEDBACK
+                    </h2>
+                    <p className="text-xs text-brand-muted font-mono mt-0.5">
+                      View participant responses grouped by manually entered team name.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={loadFeedbackTeams}
+                  disabled={loadingFeedbackTeams}
+                  className="px-3.5 py-2 rounded-xl bg-brand-card border border-brand-border text-brand-muted hover:text-white text-xs font-mono flex items-center gap-2 transition-all disabled:opacity-50"
+                  title="Reload submitted team names from feedback database"
+                >
+                  <RefreshCw size={14} className={loadingFeedbackTeams ? 'animate-spin text-brand-primary' : ''} />
+                  <span>REFRESH TEAMS</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Team Selection Card */}
+            <div className="bg-brand-surface border border-brand-border p-5 sm:p-6 rounded-2xl shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-brand-border/60 pb-3">
+                <div>
+                  <label htmlFor="team-select-dropdown" className="font-display font-bold text-sm text-white tracking-wide flex items-center gap-2">
+                    <Users size={16} className="text-brand-primary" />
+                    Select Team Name
+                  </label>
+                  <p className="font-mono text-xs text-brand-muted mt-0.5">
+                    Populated exclusively from participant feedback submissions. Distinct spellings and casing are preserved.
+                  </p>
+                </div>
+                {feedbackTeams.length > 0 && (
+                  <span className="font-mono text-[11px] px-2.5 py-1 rounded-full bg-brand-card border border-brand-border text-brand-muted shrink-0">
+                    {feedbackTeams.length} submitted team {feedbackTeams.length === 1 ? 'name' : 'names'}
+                  </span>
+                )}
+              </div>
+
+              {/* State handling: Loading, Error, Empty, or Dropdown */}
+              {loadingFeedbackTeams ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 font-mono text-xs text-brand-muted">
+                  <RefreshCw size={20} className="animate-spin text-brand-primary" />
+                  <span>Loading submitted team names from feedback database...</span>
+                </div>
+              ) : feedbackTeamsError ? (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-xs flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0" />
+                    <span>{feedbackTeamsError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadFeedbackTeams}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold transition-all"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : feedbackTeams.length === 0 ? (
+                <div className="py-8 text-center font-mono text-xs text-brand-muted bg-brand-card/40 rounded-xl border border-brand-border/60">
+                  <MessageSquareHeart size={28} className="mx-auto text-brand-muted/40 mb-2" />
+                  <p className="font-bold text-gray-300">No feedback submissions received yet.</p>
+                  <p className="text-[11px] mt-1 text-brand-muted">Participant feedback will appear here as soon as responses are submitted.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Search / Filter Input for fast searching */}
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-muted" />
+                    <input
+                      type="text"
+                      value={feedbackTeamSearchTerm}
+                      onChange={e => setFeedbackTeamSearchTerm(e.target.value)}
+                      placeholder="Search submitted team names (preserves original spelling)..."
+                      className="w-full pl-9 pr-8 py-2.5 bg-brand-card border border-brand-border rounded-xl text-white font-mono text-xs outline-none focus:border-brand-primary transition-all placeholder:text-brand-muted/60"
+                    />
+                    {feedbackTeamSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setFeedbackTeamSearchTerm('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-white p-0.5"
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Select labelled 'Select Team Name' */}
+                  <div className="relative">
+                    <select
+                      id="team-select-dropdown"
+                      value={selectedFeedbackTeam || ''}
+                      onChange={e => handleSelectFeedbackTeam(e.target.value)}
+                      className="w-full px-4 py-3 bg-brand-card border border-brand-border rounded-xl text-white font-mono text-xs outline-none focus:border-brand-primary transition-all cursor-pointer appearance-none pr-10"
+                    >
+                      <option value="">-- Select Team Name --</option>
+                      {filteredFeedbackTeams.map((teamName, idx) => (
+                        <option key={`${teamName}-${idx}`} value={teamName} className="bg-brand-surface text-white">
+                          {teamName}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-brand-muted pointer-events-none" />
+                  </div>
+
+                  {feedbackTeamSearchTerm && filteredFeedbackTeams.length === 0 && (
+                    <p className="font-mono text-[11px] text-amber-400/80">
+                      No submitted team names match "{feedbackTeamSearchTerm}".
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Submissions Section for Selected Team */}
+            {selectedFeedbackTeam && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-brand-surface/80 border border-brand-border p-4 rounded-xl">
+                  <div>
+                    <span className="font-mono text-[11px] text-brand-muted uppercase tracking-wider">
+                      Selected Team Filter
+                    </span>
+                    <h3 className="font-display font-black text-base sm:text-lg text-white flex items-center gap-2 mt-0.5">
+                      <span className="px-2.5 py-0.5 rounded bg-brand-primary/10 border border-brand-primary/30 text-brand-primary font-mono text-xs sm:text-sm">
+                        {selectedFeedbackTeam}
+                      </span>
+                    </h3>
+                  </div>
+
+                  {!loadingFeedbackSubmissions && !feedbackSubmissionsError && (
+                    <span className="font-mono text-xs text-brand-muted">
+                      {feedbackSubmissions.length} {feedbackSubmissions.length === 1 ? 'submission' : 'submissions'} found
+                    </span>
+                  )}
+                </div>
+
+                {/* Submissions Loading / Error / List */}
+                {loadingFeedbackSubmissions ? (
+                  <div className="p-10 rounded-2xl bg-brand-surface border border-brand-border flex flex-col items-center justify-center gap-2 font-mono text-xs text-brand-muted">
+                    <RefreshCw size={20} className="animate-spin text-brand-primary" />
+                    <span>Retrieving feedback submissions for "{selectedFeedbackTeam}"...</span>
+                  </div>
+                ) : feedbackSubmissionsError ? (
+                  <div className="p-5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-xs flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={16} className="shrink-0" />
+                      <span>{feedbackSubmissionsError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectFeedbackTeam(selectedFeedbackTeam)}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold transition-all"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : feedbackSubmissions.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-brand-surface border border-brand-border text-center font-mono text-xs text-brand-muted">
+                    <AlertCircle size={24} className="mx-auto text-brand-muted/40 mb-2" />
+                    <p className="font-semibold text-gray-300">No feedback submissions found for this team name.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {feedbackSubmissions.map((sub, index) => {
+                      const participant = sub.participant_name || sub.participantName || 'Anonymous Participant'
+                      const team = sub.team_name || sub.teamName || selectedFeedbackTeam
+                      return (
+                        <div
+                          key={sub.id || index}
+                          className="p-4 sm:p-5 rounded-2xl bg-brand-surface border border-brand-border hover:border-brand-primary/40 transition-all shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                        >
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-display font-bold text-sm sm:text-base text-white flex items-center gap-1.5">
+                                <User size={15} className="text-cyan-400 shrink-0" />
+                                {participant}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-brand-primary/10 border border-brand-primary/20 text-brand-primary font-mono text-xs">
+                                {team}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-4 text-brand-muted font-mono text-xs flex-wrap">
+                              <span className="flex items-center gap-1.5">
+                                <Clock size={13} className="shrink-0 text-brand-muted/70" />
+                                <span>{formatFeedbackTimestamp(sub.created_at)}</span>
+                              </span>
+                              {sub.id && (
+                                <span className="text-[11px] text-brand-muted/50 hidden sm:inline">
+                                  ID: {sub.id.slice(0, 8)}...
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setViewingFeedbackSubmission(sub)}
+                            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-brand-card hover:bg-brand-primary border border-brand-border hover:border-brand-primary text-white font-mono text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-sm group"
+                          >
+                            <Eye size={14} className="text-brand-primary group-hover:text-white transition-colors" />
+                            <span>View Feedback</span>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         ) : (
           <>
@@ -4579,6 +4894,332 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <ExternalLink size={14} /> Open Screenshot in Google Drive
                   </a>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── MODAL: COMPLETE PARTICIPANT FEEDBACK DETAIL VIEW ──────────────── */}
+        {viewingFeedbackSubmission && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setViewingFeedbackSubmission(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-brand-surface border border-brand-border rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-brand-border bg-brand-card/80">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 shrink-0">
+                    <MessageSquareHeart size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-black text-lg sm:text-xl text-white tracking-wide">
+                      Feedback Submission Details
+                    </h3>
+                    <p className="font-mono text-xs text-brand-muted">
+                      Reference ID: <span className="text-gray-300">{viewingFeedbackSubmission.id}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingFeedbackSubmission(null)}
+                  className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-surface transition-all"
+                  title="Close Feedback View"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
+                {/* Participant Details Card */}
+                <div className="bg-brand-card/80 border border-brand-border p-4 sm:p-5 rounded-2xl shadow-sm space-y-3">
+                  <div className="font-mono text-xs font-bold text-brand-primary tracking-widest uppercase flex items-center gap-1.5">
+                    <Sparkles size={13} /> PARTICIPANT DETAILS
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+                    <div>
+                      <span className="text-brand-muted block text-[11px]">Participant Name:</span>
+                      <strong className="text-white text-sm block mt-0.5">
+                        {viewingFeedbackSubmission.participant_name || viewingFeedbackSubmission.participantName || 'Not provided'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-brand-muted block text-[11px]">Team Name (Exact as Submitted):</span>
+                      <strong className="text-brand-primary text-sm block mt-0.5">
+                        {viewingFeedbackSubmission.team_name || viewingFeedbackSubmission.teamName || 'Not provided'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-brand-muted block text-[11px]">Submission Timestamp:</span>
+                      <span className="text-gray-300 block mt-0.5">
+                        {formatFeedbackTimestamp(viewingFeedbackSubmission.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 1: Registration & Onboarding */}
+                <div className="bg-brand-card/60 border border-brand-border p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="border-b border-brand-border/60 pb-2">
+                    <span className="font-mono text-[10px] text-brand-primary font-bold uppercase tracking-wider">SECTION 1 OF 6</span>
+                    <h4 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                      Registration & Onboarding
+                    </h4>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q1. How was your overall registration experience?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q1_registration_experience || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q2. Did you face any issues during registration or while accessing event information?
+                      </p>
+                      <div className="mt-1.5 p-3 rounded-xl bg-brand-surface border border-brand-border/70 text-gray-200 font-mono text-xs whitespace-pre-wrap leading-relaxed">
+                        {viewingFeedbackSubmission.q2_registration_issues || 'Not provided'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Problem Statement, Scenarios, Hints & Constraints */}
+                <div className="bg-brand-card/60 border border-brand-border p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="border-b border-brand-border/60 pb-2">
+                    <span className="font-mono text-[10px] text-brand-primary font-bold uppercase tracking-wider">SECTION 2 OF 6</span>
+                    <h4 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                      Problem Statement, Scenarios, Hints & Constraints
+                    </h4>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q3. How clear and understandable was the initial problem statement?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q3_problem_statement_clarity || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q4. How relevant and useful were the scenarios in helping your team understand the problem?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q4_scenarios_usefulness || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q5. How helpful were the hints released during the hackathon?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q5_hints_helpfulness || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q6. Were the constraints released at the appropriate time, and were their requirements clear?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q6_constraints_timing_clarity || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q7. Did the problem statement, scenarios, hints and constraints evolve in a way that tested your team's adaptability fairly?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q7_adaptability_fairness || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Evaluation & Judges */}
+                <div className="bg-brand-card/60 border border-brand-border p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="border-b border-brand-border/60 pb-2">
+                    <span className="font-mono text-[10px] text-brand-primary font-bold uppercase tracking-wider">SECTION 3 OF 6</span>
+                    <h4 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                      Evaluation & Judges
+                    </h4>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q8. How fair and transparent was the First Evaluation (elimination round)?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q8_first_evaluation_fairness || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q9. How fair and useful was the Final Evaluation process for the shortlisted teams?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q9_final_evaluation_fairness || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q10. How would you rate the judges' technical understanding and domain knowledge?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q10_judges_technical_knowledge || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q11. Did the judges provide sufficient time, clear questions and a fair opportunity to demonstrate their work?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q11_judges_fair_opportunity || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q12. Did you feel that the evaluation criteria were clear and applied consistently across teams?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q12_evaluation_criteria_consistency || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Evaluation Portal & Technical Experience */}
+                <div className="bg-brand-card/60 border border-brand-border p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="border-b border-brand-border/60 pb-2">
+                    <span className="font-mono text-[10px] text-brand-primary font-bold uppercase tracking-wider">SECTION 4 OF 6</span>
+                    <h4 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                      Evaluation Portal & Technical Experience
+                    </h4>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q13. How would you rate the evaluation portal's speed, reliability and ease of use?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q13_portal_experience || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q14. Did you encounter any portal issues?
+                      </p>
+                      <div className="mt-1.5 p-3 rounded-xl bg-brand-surface border border-brand-border/70 text-gray-200 font-mono text-xs whitespace-pre-wrap leading-relaxed">
+                        {viewingFeedbackSubmission.q14_portal_issues || 'Not provided'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 5: Event Organization & Facilities */}
+                <div className="bg-brand-card/60 border border-brand-border p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="border-b border-brand-border/60 pb-2">
+                    <span className="font-mono text-[10px] text-brand-primary font-bold uppercase tracking-wider">SECTION 5 OF 6</span>
+                    <h4 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                      Event Organization & Facilities
+                    </h4>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q15. How would you rate the organizers' communication, coordination and responsiveness?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q15_organizer_communication || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q16. How would you rate the food, refreshments and meal arrangements?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q16_food_and_refreshments || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                        Q17. How would you rate the venue, workspace, power supply, internet connectivity and overnight accommodation?
+                      </p>
+                      <div className="mt-1.5">
+                        <span className="inline-block px-3 py-1 rounded-lg bg-brand-surface border border-brand-border text-white font-mono text-xs font-semibold">
+                          {viewingFeedbackSubmission.q17_venue_and_facilities || 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 6: Overall Experience & Improvement */}
+                <div className="bg-brand-card/60 border border-brand-border p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="border-b border-brand-border/60 pb-2">
+                    <span className="font-mono text-[10px] text-brand-primary font-bold uppercase tracking-wider">SECTION 6 OF 6</span>
+                    <h4 className="font-display font-black text-sm sm:text-base text-white tracking-wide">
+                      Overall Experience & Improvement
+                    </h4>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-xs sm:text-sm text-gray-200">
+                      Q18. What was the most valuable part of Sakthi HackFest'26, and what are the top improvements you would recommend for the next edition?
+                    </p>
+                    <div className="mt-1.5 p-3.5 rounded-xl bg-brand-surface border border-brand-border/70 text-gray-200 font-mono text-xs whitespace-pre-wrap leading-relaxed">
+                      {viewingFeedbackSubmission.q18_overall_feedback || 'Not provided'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-brand-border bg-brand-card/80 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setViewingFeedbackSubmission(null)}
+                  className="px-5 py-2.5 rounded-xl bg-brand-surface border border-brand-border hover:bg-brand-card text-white font-mono text-xs font-semibold transition-all"
+                >
+                  Close Feedback View
+                </button>
               </div>
             </motion.div>
           </div>

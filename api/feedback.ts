@@ -278,6 +278,22 @@ export default async function handler(req: any, res?: any) {
     return res.status(status).json(data);
   };
 
+  const getQueryParam = (param: string): string | undefined => {
+    if (isEdge && urlObj) {
+      return urlObj.searchParams.get(param) || undefined;
+    }
+    if (req.query && typeof req.query[param] === 'string') {
+      return req.query[param];
+    }
+    if (req.url) {
+      try {
+        const u = new URL(req.url, 'http://localhost');
+        return u.searchParams.get(param) || undefined;
+      } catch {}
+    }
+    return undefined;
+  };
+
   // ── GET REQUESTS (Admin Only) ─────────────────────────────────────────────
   if (method === 'GET') {
     const token = extractToken(req);
@@ -288,8 +304,99 @@ export default async function handler(req: any, res?: any) {
       });
     }
 
+    const requestedAction = (getQueryParam('action') || '').toLowerCase();
+    const requestedTeam = getQueryParam('team_name') ?? getQueryParam('teamName');
+
     try {
       const supabase = getSupabase();
+
+      // CASE 1: Fetch distinct team names submitted in participant feedback
+      if (requestedAction === 'teams' || requestedAction === 'get_teams') {
+        if (!supabase) {
+          const localFallbackFile = path.resolve(process.cwd(), '.feedback_submissions.local.json');
+          let list: any[] = [];
+          try {
+            if (fs.existsSync(localFallbackFile)) {
+              list = JSON.parse(fs.readFileSync(localFallbackFile, 'utf8'));
+            }
+          } catch {}
+          const rawNames = list
+            .map((item: any) => item.team_name || item.teamName)
+            .filter((n: any) => typeof n === 'string' && n.trim().length > 0);
+          const distinctTeams = Array.from(new Set(rawNames)).sort((a: any, b: any) => a.localeCompare(b));
+          return send(200, { success: true, count: distinctTeams.length, teams: distinctTeams, data: distinctTeams });
+        }
+
+        // Single Source of Truth: SELECT team_name from participant_feedback (using existing idx_participant_feedback_team_name)
+        const { data, error } = await supabase
+          .from('participant_feedback')
+          .select('team_name');
+
+        if (error) {
+          return send(500, { success: false, message: error.message });
+        }
+
+        const rawNames = (data || [])
+          .map((r: any) => r.team_name)
+          .filter((n: any) => typeof n === 'string' && n.trim().length > 0);
+
+        // Preserve original submitted spelling and capitalization; retain each distinct string once
+        const distinctTeams = Array.from(new Set(rawNames)).sort((a: any, b: any) => a.localeCompare(b));
+
+        return send(200, {
+          success: true,
+          count: distinctTeams.length,
+          teams: distinctTeams,
+          data: distinctTeams,
+        });
+      }
+
+      // CASE 2: Fetch feedback submissions for exact selected submitted team name
+      if (requestedTeam !== undefined && requestedTeam !== null) {
+        if (!supabase) {
+          const localFallbackFile = path.resolve(process.cwd(), '.feedback_submissions.local.json');
+          let list: any[] = [];
+          try {
+            if (fs.existsSync(localFallbackFile)) {
+              list = JSON.parse(fs.readFileSync(localFallbackFile, 'utf8'));
+            }
+          } catch {}
+          const filtered = list
+            .filter((item: any) => (item.team_name || item.teamName) === requestedTeam)
+            .map((item: any) => ({
+              ...item,
+              participantName: item.participant_name || item.participantName,
+              teamName: item.team_name || item.teamName,
+            }));
+          return send(200, { success: true, count: filtered.length, team_name: requestedTeam, data: filtered });
+        }
+
+        // Query only submissions matching the exact submitted team name string
+        const { data, error } = await supabase
+          .from('participant_feedback')
+          .select('*')
+          .eq('team_name', requestedTeam)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          return send(500, { success: false, message: error.message });
+        }
+
+        const normalized = (data || []).map((row: any) => ({
+          ...row,
+          participantName: row.participant_name,
+          teamName: row.team_name,
+        }));
+
+        return send(200, {
+          success: true,
+          count: normalized.length,
+          team_name: requestedTeam,
+          data: normalized,
+        });
+      }
+
+      // CASE 3: Fetch all feedback submissions (admin overview)
       if (!supabase) {
         const localFallbackFile = path.resolve(process.cwd(), '.feedback_submissions.local.json');
         let list: any[] = [];
@@ -310,7 +417,13 @@ export default async function handler(req: any, res?: any) {
         return send(500, { success: false, message: error.message });
       }
 
-      return send(200, { success: true, count: data?.length || 0, data });
+      const normalized = (data || []).map((row: any) => ({
+        ...row,
+        participantName: row.participant_name,
+        teamName: row.team_name,
+      }));
+
+      return send(200, { success: true, count: normalized.length, data: normalized });
     } catch (err: any) {
       return send(500, { success: false, message: err.message });
     }
@@ -329,6 +442,96 @@ export default async function handler(req: any, res?: any) {
   }
 
   const action = String(body.action || '').toUpperCase();
+
+  // Admin: Get distinct submitted team names
+  if (action === 'GET_TEAMS' || action === 'GET_FEEDBACK_TEAMS') {
+    const token = extractToken(req) || body.token;
+    if (!verifyAdminToken(token)) {
+      return send(401, { success: false, message: 'Unauthorized. Admin credentials required.' });
+    }
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        const localFallbackFile = path.resolve(process.cwd(), '.feedback_submissions.local.json');
+        let list: any[] = [];
+        try {
+          if (fs.existsSync(localFallbackFile)) {
+            list = JSON.parse(fs.readFileSync(localFallbackFile, 'utf8'));
+          }
+        } catch {}
+        const rawNames = list
+          .map((item: any) => item.team_name || item.teamName)
+          .filter((n: any) => typeof n === 'string' && n.trim().length > 0);
+        const distinctTeams = Array.from(new Set(rawNames)).sort((a: any, b: any) => a.localeCompare(b));
+        return send(200, { success: true, count: distinctTeams.length, teams: distinctTeams, data: distinctTeams });
+      }
+
+      const { data, error } = await supabase.from('participant_feedback').select('team_name');
+      if (error) return send(500, { success: false, message: error.message });
+
+      const rawNames = (data || [])
+        .map((r: any) => r.team_name)
+        .filter((n: any) => typeof n === 'string' && n.trim().length > 0);
+      const distinctTeams = Array.from(new Set(rawNames)).sort((a: any, b: any) => a.localeCompare(b));
+
+      return send(200, { success: true, count: distinctTeams.length, teams: distinctTeams, data: distinctTeams });
+    } catch (err: any) {
+      return send(500, { success: false, message: err.message });
+    }
+  }
+
+  // Admin: Get submissions by exact submitted team name
+  if (action === 'GET_SUBMISSIONS_BY_TEAM' || action === 'GET_FEEDBACK_BY_TEAM') {
+    const token = extractToken(req) || body.token;
+    if (!verifyAdminToken(token)) {
+      return send(401, { success: false, message: 'Unauthorized. Admin credentials required.' });
+    }
+
+    const requestedTeam = body.team_name ?? body.teamName;
+    if (typeof requestedTeam !== 'string') {
+      return send(400, { success: false, message: 'team_name string is required.' });
+    }
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        const localFallbackFile = path.resolve(process.cwd(), '.feedback_submissions.local.json');
+        let list: any[] = [];
+        try {
+          if (fs.existsSync(localFallbackFile)) {
+            list = JSON.parse(fs.readFileSync(localFallbackFile, 'utf8'));
+          }
+        } catch {}
+        const filtered = list
+          .filter((item: any) => (item.team_name || item.teamName) === requestedTeam)
+          .map((item: any) => ({
+            ...item,
+            participantName: item.participant_name || item.participantName,
+            teamName: item.team_name || item.teamName,
+          }));
+        return send(200, { success: true, count: filtered.length, team_name: requestedTeam, data: filtered });
+      }
+
+      const { data, error } = await supabase
+        .from('participant_feedback')
+        .select('*')
+        .eq('team_name', requestedTeam)
+        .order('created_at', { ascending: false });
+
+      if (error) return send(500, { success: false, message: error.message });
+
+      const normalized = (data || []).map((row: any) => ({
+        ...row,
+        participantName: row.participant_name,
+        teamName: row.team_name,
+      }));
+
+      return send(200, { success: true, count: normalized.length, team_name: requestedTeam, data: normalized });
+    } catch (err: any) {
+      return send(500, { success: false, message: err.message });
+    }
+  }
 
   // Admin delete test feedback record
   if (action === 'DELETE_TEST_FEEDBACK') {

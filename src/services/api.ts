@@ -5,7 +5,7 @@
  * email status tracking, and admin verification actions.
  */
 
-import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus, StoredAccommodation, AppSettings, AccommodationStatus, ParticipantFeedbackPayload } from '../types'
+import type { StoredRegistration, AdminStats, ApiResponse, EmailStatus, StoredAccommodation, AppSettings, AccommodationStatus, ParticipantFeedbackPayload, StoredParticipantFeedback } from '../types'
 import * as XLSX from 'xlsx'
 import { IS_REGISTRATION_CLOSED } from '../../config/event'
 
@@ -926,6 +926,52 @@ export const apiService = {
       return json
     } catch (e: any) {
       return { success: false, error: e.message || 'Network error occurred while submitting feedback.' }
+    }
+  },
+
+  /**
+   * Fetch distinct submitted team names from participant feedback (Admin only)
+   * Single Source of Truth: public.participant_feedback
+   */
+  async getFeedbackTeams(): Promise<ApiResponse<string[]>> {
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch('/api/feedback?action=teams', {
+        headers: {
+          'Authorization': `Bearer ${token || ''}`,
+        },
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        return { success: true, data: data.teams || data.data || [] }
+      }
+      return { success: false, error: data.message || data.error || 'Failed to retrieve feedback team names.' }
+    } catch (err: any) {
+      console.error('getFeedbackTeams error:', err)
+      return { success: false, error: err.message || 'Failed to retrieve feedback team names.' }
+    }
+  },
+
+  /**
+   * Fetch feedback submissions filtered by exact submitted team name (Admin only)
+   * Single Source of Truth: public.participant_feedback
+   */
+  async getFeedbackByTeam(teamName: string): Promise<ApiResponse<StoredParticipantFeedback[]>> {
+    const token = this.getAdminToken()
+    try {
+      const res = await fetch(`/api/feedback?team_name=${encodeURIComponent(teamName)}`, {
+        headers: {
+          'Authorization': `Bearer ${token || ''}`,
+        },
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        return { success: true, data: data.data || [] }
+      }
+      return { success: false, error: data.message || data.error || 'Failed to retrieve feedback for this team.' }
+    } catch (err: any) {
+      console.error('getFeedbackByTeam error:', err)
+      return { success: false, error: err.message || 'Failed to retrieve feedback for this team.' }
     }
   },
 }
