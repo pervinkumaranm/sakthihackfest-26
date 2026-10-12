@@ -393,10 +393,8 @@ export const apiService = {
   },
 
   isAdminAuthenticated(): boolean {
-    return Boolean(
-      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('shf26_admin_token')) ||
-      (typeof localStorage !== 'undefined' && localStorage.getItem('shf26_admin_token'))
-    )
+    const token = this.getAdminToken()
+    return Boolean(token)
   },
 
   getAdminUser(): string | null {
@@ -408,11 +406,34 @@ export const apiService = {
   },
 
   getAdminToken(): string | null {
-    return (
+    const raw =
       (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('shf26_admin_token')) ||
       (typeof localStorage !== 'undefined' && localStorage.getItem('shf26_admin_token')) ||
       null
-    )
+    if (!raw || raw === 'null' || raw === 'undefined') return null
+
+    // Validate structure and expiration timestamp
+    try {
+      const parts = raw.split('.')
+      if (parts.length !== 2) {
+        this.adminLogout()
+        return null
+      }
+      const base64 = parts[0].replace(/-/g, '+').replace(/_/g, '/')
+      const json =
+        typeof atob === 'function'
+          ? atob(base64)
+          : Buffer.from(base64, 'base64').toString('utf-8')
+      const payload = JSON.parse(json)
+      if (payload.exp && Date.now() > payload.exp) {
+        this.adminLogout()
+        return null
+      }
+      return raw
+    } catch {
+      this.adminLogout()
+      return null
+    }
   },
 
   /**
@@ -441,15 +462,28 @@ export const apiService = {
    */
   async getRegistrations(): Promise<{ registrations: StoredRegistration[]; stats?: AdminStats; error?: string }> {
     const token = this.getAdminToken()
+    if (!token) {
+      return {
+        registrations: [],
+        error: 'Unauthorized. Please sign in to access registrations.',
+      }
+    }
     try {
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || ''}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action: 'get_registrations' }),
+        body: JSON.stringify({ action: 'get_registrations', token }),
       })
+      if (res.status === 401) {
+        this.adminLogout()
+        return {
+          registrations: [],
+          error: 'Your session has expired. Please sign in again.',
+        }
+      }
       const result = await res.json()
       if (res.ok && result.success && Array.isArray(result.data)) {
         return {
@@ -788,7 +822,10 @@ export const apiService = {
   },
 
   async getAccommodations(): Promise<StoredAccommodation[]> {
-    const token = localStorage.getItem('shf26_admin_token') || sessionStorage.getItem('shf26_admin_token')
+    const token = this.getAdminToken()
+    if (!token) {
+      return []
+    }
     try {
       const res = await fetch('/api/accommodation', {
         method: 'POST',
@@ -796,8 +833,12 @@ export const apiService = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ action: 'GET_ACCOMMODATIONS' }),
+        body: JSON.stringify({ action: 'GET_ACCOMMODATIONS', token }),
       })
+      if (res.status === 401) {
+        this.adminLogout()
+        return []
+      }
       if (res.ok) {
         const json = await res.json()
         if (json.success && Array.isArray(json.data)) {
@@ -811,7 +852,10 @@ export const apiService = {
   },
 
   async updateAccommodationStatus(accommodationId: string, status: AccommodationStatus, reason?: string): Promise<ApiResponse> {
-    const token = localStorage.getItem('shf26_admin_token') || sessionStorage.getItem('shf26_admin_token')
+    const token = this.getAdminToken()
+    if (!token) {
+      return { success: false, error: 'Unauthorized. Admin credentials required.' }
+    }
     try {
       const res = await fetch('/api/accommodation', {
         method: 'POST',
@@ -821,11 +865,16 @@ export const apiService = {
         },
         body: JSON.stringify({
           action: 'UPDATE_STATUS',
+          token,
           accommodationId,
           accommodationStatus: status,
           rejectionReason: reason,
         }),
       })
+      if (res.status === 401) {
+        this.adminLogout()
+        return { success: false, error: 'Unauthorized or expired session. Please log in again.' }
+      }
       return await res.json()
     } catch (e: any) {
       return { success: false, error: e.message || 'Failed to update accommodation status.' }

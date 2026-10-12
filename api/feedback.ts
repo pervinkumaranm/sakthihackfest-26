@@ -78,15 +78,15 @@ function isSupabaseConfigured(): boolean {
 
 function getAdminSecret(): string {
   loadLocalEnvIfNeeded();
-  return (
+  const raw =
     process.env.ADMIN_JWT_SECRET ||
     process.env.GOOGLE_PRIVATE_KEY?.slice(0, 32) ||
-    'sakthi-hackfest-2026-secure-jwt-secret-key-9921'
-  );
+    'sakthi-hackfest-2026-admin-secret-seed-982341';
+  return raw.trim().replace(/^["']|["']$/g, '');
 }
 
 function verifyAdminToken(token?: string): boolean {
-  if (!token) return false;
+  if (!token || token === 'null' || token === 'undefined') return false;
   const parts = token.split('.');
   if (parts.length !== 2) return false;
 
@@ -104,6 +104,9 @@ function verifyAdminToken(token?: string): boolean {
     if (!payload.exp || Date.now() > payload.exp) {
       return false;
     }
+    if (payload.role !== 'ADMIN') {
+      return false;
+    }
     return true;
   } catch {
     return false;
@@ -111,9 +114,19 @@ function verifyAdminToken(token?: string): boolean {
 }
 
 function extractToken(req: any): string | undefined {
-  const authHeader = req.headers?.authorization || req.headers?.get?.('authorization');
-  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    return authHeader.slice(7).trim();
+  const authHeader =
+    req.headers?.authorization ||
+    req.headers?.Authorization ||
+    req.headers?.get?.('authorization') ||
+    req.headers?.get?.('Authorization');
+  if (authHeader && typeof authHeader === 'string') {
+    const trimmed = authHeader.trim();
+    if (trimmed.toLowerCase().startsWith('bearer ')) {
+      const t = trimmed.slice(7).trim();
+      if (t && t !== 'null' && t !== 'undefined') {
+        return t;
+      }
+    }
   }
   return undefined;
 }
