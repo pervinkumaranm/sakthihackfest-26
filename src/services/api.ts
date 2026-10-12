@@ -979,6 +979,36 @@ export const apiService = {
   },
 
   /**
+   * Fetch all feedback submissions for spreadsheet viewer (Admin only)
+   * Single Source of Truth: public.participant_feedback
+   */
+  async getAllFeedback(): Promise<ApiResponse<StoredParticipantFeedback[]>> {
+    const token = this.getAdminToken()
+    if (!token) {
+      return { success: false, error: 'Unauthorized. Admin credentials required.' }
+    }
+    try {
+      const res = await fetch('/api/feedback', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      if (res.status === 401) {
+        this.adminLogout()
+        return { success: false, error: 'Unauthorized or expired session. Please log in again.' }
+      }
+      const data = await res.json()
+      if (res.ok && data.success) {
+        return { success: true, data: data.data || [] }
+      }
+      return { success: false, error: data.message || data.error || 'Failed to retrieve feedback submissions.' }
+    } catch (err: any) {
+      console.error('getAllFeedback error:', err)
+      return { success: false, error: err.message || 'Failed to retrieve feedback submissions.' }
+    }
+  },
+
+  /**
    * Fetch distinct submitted team names from participant feedback (Admin only)
    * Single Source of Truth: public.participant_feedback
    */

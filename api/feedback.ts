@@ -424,7 +424,8 @@ export default async function handler(req: any, res?: any) {
       const { data, error } = await supabase
         .from('participant_feedback')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(5000);
 
       if (error) {
         return send(500, { success: false, message: error.message });
@@ -449,12 +450,52 @@ export default async function handler(req: any, res?: any) {
 
   let body: any;
   try {
-    body = isEdge ? await req.json() : (typeof req.body === 'string' ? JSON.parse(req.body) : req.body);
+    body = (isEdge ? await req.json() : (typeof req.body === 'string' ? JSON.parse(req.body) : req.body)) || {};
   } catch {
     return send(400, { success: false, message: 'Invalid JSON payload' });
   }
 
   const action = String(body.action || '').toUpperCase();
+
+  // Admin: Get all feedback submissions (POST version)
+  if (action === 'GET_ALL_FEEDBACK' || action === 'GET_FEEDBACK') {
+    const token = extractToken(req) || body.token;
+    if (!verifyAdminToken(token)) {
+      return send(401, { success: false, message: 'Unauthorized. Admin credentials required.' });
+    }
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        const localFallbackFile = path.resolve(process.cwd(), '.feedback_submissions.local.json');
+        let list: any[] = [];
+        try {
+          if (fs.existsSync(localFallbackFile)) {
+            list = JSON.parse(fs.readFileSync(localFallbackFile, 'utf8'));
+          }
+        } catch {}
+        return send(200, { success: true, count: list.length, data: list });
+      }
+
+      const { data, error } = await supabase
+        .from('participant_feedback')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5000);
+
+      if (error) return send(500, { success: false, message: error.message });
+
+      const normalized = (data || []).map((row: any) => ({
+        ...row,
+        participantName: row.participant_name,
+        teamName: row.team_name,
+      }));
+
+      return send(200, { success: true, count: normalized.length, data: normalized });
+    } catch (err: any) {
+      return send(500, { success: false, message: err.message });
+    }
+  }
 
   // Admin: Get distinct submitted team names
   if (action === 'GET_TEAMS' || action === 'GET_FEEDBACK_TEAMS') {
