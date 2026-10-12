@@ -273,7 +273,7 @@ export default function Feedback() {
     try {
       const response = await apiService.submitFeedback(payload)
       if (response && response.success) {
-        setSubmissionId((response.data as any)?.id || response.registrationId || 'SUBMITTED')
+        setSubmissionId((response.data as any)?.id || (response as any).id || response.registrationId || 'SUBMITTED')
         setIsSubmitted(true)
         window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
       } else {

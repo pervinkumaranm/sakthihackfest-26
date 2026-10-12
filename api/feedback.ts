@@ -462,6 +462,7 @@ export default async function handler(req: any, res?: any) {
     return send(200, {
       success: true,
       id: data.id,
+      data: { id: data.id, createdAt: data.created_at },
       message: 'Thank you for sharing your feedback! Your response has been recorded successfully.',
       createdAt: data.created_at,
     });

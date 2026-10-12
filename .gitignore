@@ -26,6 +26,7 @@ dist-ssr
 scratchpad*.cjs
 scratchpad*.js
 .env
+env
 .env*.local
 *.pem
 *service-account*.json
